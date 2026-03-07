@@ -1,39 +1,261 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 const API_URL = 'http://localhost:8000/api/v1'
 
+const ALERT_THRESHOLDS = {
+  ddPct: 20,
+  concentrationPct: 35,
+  leverageWeighted: 8
+}
+
+function Card({ label, value, color = '#b026ff' }) {
+  return (
+    <div style={{ background: '#1a1a2e', border: `1px solid ${color}`, padding: 20, borderRadius: 12, boxShadow: `0 0 16px ${color}33` }}>
+      <p style={{ color: '#888', marginBottom: 8 }}>{label}</p>
+      <p style={{ fontSize: 28, fontWeight: 'bold', color, margin: 0 }}>{value}</p>
+    </div>
+  )
+}
+
+function panelStyle() {
+  return { marginTop: 22, background: '#10101a', border: '1px solid #2a2a3f', borderRadius: 12, padding: 16 }
+}
+
+function Badge({ ok, label }) {
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        padding: '4px 10px',
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 700,
+        background: ok ? '#14301b' : '#3a1212',
+        color: ok ? '#39ff14' : '#ff6b6b',
+        border: `1px solid ${ok ? '#39ff14' : '#ff6b6b'}`
+      }}
+    >
+      {label}
+    </span>
+  )
+}
+
 function Dashboard() {
   const [stats, setStats] = useState(null)
+  const [risk, setRisk] = useState(null)
+  const [equity, setEquity] = useState([])
+  const [trades, setTrades] = useState([])
+  const [positions, setPositions] = useState([])
+  const [diag, setDiag] = useState(null)
+  const [syncing, setSyncing] = useState(false)
+
+  const [symbolFilter, setSymbolFilter] = useState('')
+  const [tradeLimit, setTradeLimit] = useState(25)
+
+  const loadBase = () => {
+    Promise.all([
+      fetch(`${API_URL}/stats/overview?window=30d`).then((r) => r.json()),
+      fetch(`${API_URL}/risk/exposure`).then((r) => r.json()),
+      fetch(`${API_URL}/stats/equity?window=30d`).then((r) => r.json()),
+      fetch(`${API_URL}/positions`).then((r) => r.json()),
+      fetch(`${API_URL}/diagnostics/connectors`).then((r) => r.json())
+    ])
+      .then(([overview, riskRes, equityRes, positionsRes, diagRes]) => {
+        setStats(overview)
+        setRisk(riskRes)
+        setEquity(equityRes?.points || [])
+        setPositions(positionsRes?.positions || [])
+        setDiag(diagRes)
+      })
+      .catch(() => {
+        setStats(null)
+        setRisk(null)
+        setEquity([])
+        setPositions([])
+        setDiag(null)
+      })
+  }
+
+  const loadTrades = () => {
+    const params = new URLSearchParams({ limit: String(tradeLimit) })
+    if (symbolFilter.trim()) params.append('symbol', symbolFilter.trim().toUpperCase())
+
+    fetch(`${API_URL}/trades?${params.toString()}`)
+      .then((r) => r.json())
+      .then((res) => setTrades(res?.trades || []))
+      .catch(() => setTrades([]))
+  }
+
+  const syncNow = async () => {
+    setSyncing(true)
+    try {
+      await fetch(`${API_URL}/sync/all?symbol=BTCUSDT&limit=100`, { method: 'POST' })
+      loadBase()
+      loadTrades()
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   useEffect(() => {
-    fetch(API_URL + '/stats/overview')
-      .then(r => r.json())
-      .then(setStats)
+    loadBase()
+    loadTrades()
   }, [])
+
+  useEffect(() => {
+    loadTrades()
+  }, [symbolFilter, tradeLimit])
+
+  const ddColor = useMemo(() => ((stats?.max_drawdown_pct || 0) > ALERT_THRESHOLDS.ddPct ? '#ff3131' : '#ffae00'), [stats])
+
+  const alerts = useMemo(() => {
+    const out = []
+    if ((stats?.max_drawdown_pct || 0) > ALERT_THRESHOLDS.ddPct) {
+      out.push({ level: 'HIGH', msg: `Drawdown élevé: ${stats.max_drawdown_pct}% (> ${ALERT_THRESHOLDS.ddPct}%)` })
+    }
+    if ((risk?.top_symbol_share_pct || 0) > ALERT_THRESHOLDS.concentrationPct) {
+      out.push({ level: 'MED', msg: `Concentration symbole élevée: ${risk.top_symbol_share_pct}% (> ${ALERT_THRESHOLDS.concentrationPct}%)` })
+    }
+    if ((risk?.leverage_weighted || 0) > ALERT_THRESHOLDS.leverageWeighted) {
+      out.push({ level: 'HIGH', msg: `Levier pondéré élevé: ${risk.leverage_weighted}x (> ${ALERT_THRESHOLDS.leverageWeighted}x)` })
+    }
+    if (!out.length) out.push({ level: 'OK', msg: 'Aucune alerte critique active' })
+    return out
+  }, [risk, stats])
 
   return (
     <div style={{ minHeight: '100vh', background: '#0a0a0f', color: 'white', padding: 24 }}>
-      <h1 style={{ color: '#b026ff', textShadow: '0 0 10px #b026ff' }}>⚡ DASHBOARD</h1>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, marginTop: 32 }}>
-        <div style={{ background: '#1a1a2e', border: '1px solid #b026ff', padding: 24, borderRadius: 12, boxShadow: '0 0 20px rgba(176,38,255,0.2)' }}>
-          <p style={{ color: '#888' }}>POSITIONS</p>
-          <p style={{ fontSize: 32, fontWeight: 'bold', color: '#b026ff' }}>{stats?.total_positions || 0}</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <h1 style={{ color: '#b026ff', textShadow: '0 0 10px #b026ff', marginTop: 0, marginBottom: 0 }}>⚡ BANJO TRADING DASHBOARD</h1>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <Badge ok={diag?.db?.status === 'ok'} label={`DB: ${diag?.db?.status || 'unknown'}`} />
+          <Badge ok={diag?.binance?.status === 'configured'} label={`BINANCE: ${diag?.binance?.status || 'unknown'}`} />
+          <button onClick={syncNow} disabled={syncing} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700, opacity: syncing ? 0.7 : 1 }}>
+            {syncing ? 'Syncing...' : 'Sync now'}
+          </button>
         </div>
-        <div style={{ background: '#1a1a2e', border: '1px solid #00f3ff', padding: 24, borderRadius: 12, boxShadow: '0 0 20px rgba(0,243,255,0.2)' }}>
-          <p style={{ color: '#888' }}>TRADES</p>
-          <p style={{ fontSize: 32, fontWeight: 'bold', color: '#00f3ff' }}>{stats?.total_trades || 0}</p>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 24 }}>
+        <Card label='POSITIONS' value={stats?.total_positions ?? 0} color='#b026ff' />
+        <Card label='TRADES' value={stats?.total_trades ?? 0} color='#00f3ff' />
+        <Card label='REALIZED P&L' value={`$${(stats?.total_realized_pnl ?? 0).toFixed?.(2) ?? '0.00'}`} color={(stats?.total_realized_pnl ?? 0) >= 0 ? '#39ff14' : '#ff3131'} />
+        <Card label='UNREALIZED P&L' value={`$${(stats?.total_unrealized_pnl ?? 0).toFixed?.(2) ?? '0.00'}`} color={(stats?.total_unrealized_pnl ?? 0) >= 0 ? '#39ff14' : '#ff3131'} />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
+        <Card label='EQUITY (proxy)' value={`$${(stats?.equity ?? 0).toFixed?.(2) ?? '0.00'}`} color='#8ab4ff' />
+        <Card label='MAX DD (window)' value={`${stats?.max_drawdown_pct ?? 0}%`} color={ddColor} />
+        <Card label='GROSS LONG' value={`$${(risk?.gross_long_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#39ff14' />
+        <Card label='GROSS SHORT' value={`$${(risk?.gross_short_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#ff3131' />
+      </div>
+
+      <div style={panelStyle()}>
+        <h3 style={{ marginTop: 0, color: '#ffd166' }}>Alerts</h3>
+        <ul style={{ margin: 0, paddingLeft: 18 }}>
+          {alerts.map((a, idx) => (
+            <li key={idx} style={{ color: a.level === 'OK' ? '#39ff14' : '#ff6b6b', marginBottom: 6 }}>
+              <strong>[{a.level}]</strong> {a.msg}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div style={panelStyle()}>
+        <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Equity trend (30d realized cumulative)</h3>
+        <div style={{ width: '100%', height: 260 }}>
+          <ResponsiveContainer>
+            <LineChart data={equity}>
+              <XAxis dataKey='ts' tick={{ fill: '#888' }} />
+              <YAxis tick={{ fill: '#888' }} />
+              <Tooltip />
+              <Line type='monotone' dataKey='equity' stroke='#00f3ff' strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
-        <div style={{ background: '#1a1a2e', border: '1px solid #39ff14', padding: 24, borderRadius: 12, boxShadow: '0 0 20px rgba(57,255,20,0.2)' }}>
-          <p style={{ color: '#888' }}>REALIZED P&L</p>
-          <p style={{ fontSize: 32, fontWeight: 'bold', color: parseFloat(stats?.total_realized_pnl) >= 0 ? '#39ff14' : '#ff3131' }}>
-            ${parseFloat(stats?.total_realized_pnl || 0).toFixed(2)}
-          </p>
+      </div>
+
+      <div style={panelStyle()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <h3 style={{ margin: 0, color: '#c8c8ff' }}>Trades</h3>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              value={symbolFilter}
+              onChange={(e) => setSymbolFilter(e.target.value)}
+              placeholder='Symbol (ex: BTCUSDT)'
+              style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}
+            />
+            <select value={tradeLimit} onChange={(e) => setTradeLimit(Number(e.target.value))} style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+            <button onClick={loadTrades} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>Refresh</button>
+          </div>
         </div>
-        <div style={{ background: '#1a1a2e', border: '1px solid #ff10f0', padding: 24, borderRadius: 12, boxShadow: '0 0 20px rgba(255,16,240,0.2)' }}>
-          <p style={{ color: '#888' }}>UNREALIZED P&L</p>
-          <p style={{ fontSize: 32, fontWeight: 'bold', color: parseFloat(stats?.total_unrealized_pnl) >= 0 ? '#39ff14' : '#ff3131' }}>
-            ${parseFloat(stats?.total_unrealized_pnl || 0).toFixed(2)}
-          </p>
+
+        <div style={{ marginTop: 10, overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ color: '#8b8ba7', textAlign: 'left', borderBottom: '1px solid #2a2a3f' }}>
+                <th style={{ padding: 8 }}>Time</th>
+                <th style={{ padding: 8 }}>Symbol</th>
+                <th style={{ padding: 8 }}>Side</th>
+                <th style={{ padding: 8 }}>Price</th>
+                <th style={{ padding: 8 }}>Qty</th>
+                <th style={{ padding: 8 }}>Fee</th>
+                <th style={{ padding: 8 }}>rPnL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {trades.map((t) => (
+                <tr key={`${t.binance_trade_id}-${t.id}`} style={{ borderBottom: '1px solid #1c1c2b' }}>
+                  <td style={{ padding: 8 }}>{new Date(t.executed_at).toLocaleString()}</td>
+                  <td style={{ padding: 8 }}>{t.symbol}</td>
+                  <td style={{ padding: 8, color: t.side === 'BUY' ? '#39ff14' : '#ff6b6b' }}>{t.side}</td>
+                  <td style={{ padding: 8 }}>{Number(t.price).toFixed(4)}</td>
+                  <td style={{ padding: 8 }}>{Number(t.qty).toFixed(4)}</td>
+                  <td style={{ padding: 8 }}>{Number(t.commission || 0).toFixed(4)}</td>
+                  <td style={{ padding: 8, color: Number(t.realized_pnl) >= 0 ? '#39ff14' : '#ff6b6b' }}>{Number(t.realized_pnl).toFixed(4)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style={panelStyle()}>
+        <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Positions</h3>
+        <div style={{ marginTop: 10, overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ color: '#8b8ba7', textAlign: 'left', borderBottom: '1px solid #2a2a3f' }}>
+                <th style={{ padding: 8 }}>Symbol</th>
+                <th style={{ padding: 8 }}>Side</th>
+                <th style={{ padding: 8 }}>Amount</th>
+                <th style={{ padding: 8 }}>Entry</th>
+                <th style={{ padding: 8 }}>Mark</th>
+                <th style={{ padding: 8 }}>Notional</th>
+                <th style={{ padding: 8 }}>Leverage</th>
+                <th style={{ padding: 8 }}>uPnL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {positions.map((p) => (
+                <tr key={`${p.symbol}-${p.id}`} style={{ borderBottom: '1px solid #1c1c2b' }}>
+                  <td style={{ padding: 8 }}>{p.symbol}</td>
+                  <td style={{ padding: 8, color: p.side === 'LONG' ? '#39ff14' : '#ff6b6b' }}>{p.side}</td>
+                  <td style={{ padding: 8 }}>{Number(p.position_amt).toFixed(4)}</td>
+                  <td style={{ padding: 8 }}>{Number(p.entry_price).toFixed(4)}</td>
+                  <td style={{ padding: 8 }}>{Number(p.mark_price).toFixed(4)}</td>
+                  <td style={{ padding: 8 }}>${Number(p.notional_usd).toFixed(2)}</td>
+                  <td style={{ padding: 8 }}>{p.leverage}x</td>
+                  <td style={{ padding: 8, color: Number(p.unrealized_pnl) >= 0 ? '#39ff14' : '#ff6b6b' }}>${Number(p.unrealized_pnl).toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import hashlib, hmac, logging, time
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from urllib.parse import urlencode
 import requests
@@ -63,7 +63,7 @@ class BinanceSyncService:
                 commission=Decimal(str(raw.get("commission", "0"))),
                 commission_asset=raw.get("commissionAsset", "USDT"),
                 realized_pnl=Decimal(str(raw.get("realizedPnl", "0"))),
-                executed_at=datetime.fromtimestamp(int(raw.get("time", int(time.time() * 1000))) / 1000, tz=UTC),
+                executed_at=datetime.fromtimestamp(int(raw.get("time", int(time.time() * 1000))) / 1000, tz=timezone.utc),
             )
             db.add(trade)
             inserted += 1
