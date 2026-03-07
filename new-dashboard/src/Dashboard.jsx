@@ -342,7 +342,8 @@ function Dashboard() {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <Badge ok={diag?.db?.status === 'ok'} label={`DB: ${diag?.db?.status || 'unknown'}`} />
           <Badge ok={diag?.binance?.status === 'configured'} label={`BINANCE: ${diag?.binance?.status || 'unknown'}`} />
-          <Badge ok={!diag?.sync?.read_only} label={diag?.sync?.read_only ? 'MODE: READ-ONLY' : 'MODE: OPERATOR'} />
+          <Badge ok={diag?.sync?.role === 'operator'} label={`ROLE: ${(diag?.sync?.role || 'operator').toUpperCase()}`} />
+          <Badge ok={!diag?.sync?.read_only} label={diag?.sync?.read_only ? 'MODE: READ-ONLY' : 'MODE: ACTIVE'} />
           <select value={windowFilter} onChange={(e) => setWindowFilter(e.target.value)} style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}>
             <option value='24h'>24h</option>
             <option value='7d'>7d</option>
@@ -362,7 +363,7 @@ function Dashboard() {
               style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}
             />
           )}
-          <button onClick={syncNow} disabled={syncing || !!diag?.sync?.read_only} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700, opacity: syncing || !!diag?.sync?.read_only ? 0.5 : 1 }}>
+          <button onClick={syncNow} disabled={syncing || !diag?.sync?.can_sync} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700, opacity: syncing || !diag?.sync?.can_sync ? 0.5 : 1 }}>
             {syncing ? 'Syncing...' : 'Sync now'}
           </button>
           <button onClick={resetUiSettings} style={{ background: '#2d2d45', color: '#fff', border: '1px solid #444466', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>
@@ -371,9 +372,21 @@ function Dashboard() {
         </div>
       </div>
 
-      {syncError && (
+      {(!diag?.sync?.can_sync || syncError) && (
         <div style={{ ...panelStyle(), border: '1px solid #ff6b6b' }}>
-          <strong style={{ color: '#ff6b6b' }}>Sync error:</strong> {syncError}
+          {!diag?.sync?.can_sync && (
+            <div>
+              <strong style={{ color: '#ff6b6b' }}>Sync locked:</strong>{' '}
+              {diag?.sync?.can_sync_reason === 'app_read_only'
+                ? 'application is in read-only mode (APP_READ_ONLY=true).'
+                : diag?.sync?.can_sync_reason === 'role_viewer'
+                  ? 'current role is viewer (APP_ROLE=viewer).'
+                  : 'role/mode does not allow operator actions.'}
+            </div>
+          )}
+          {syncError && (
+            <div><strong style={{ color: '#ff6b6b' }}>Sync error:</strong> {syncError}</div>
+          )}
         </div>
       )}
 

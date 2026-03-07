@@ -296,6 +296,18 @@ def diagnostics_connectors(db: Session = Depends(get_db)):
     candidates = [ts for ts in [last_trade_ts, last_position_ts] if ts is not None]
     last_sync_at = max(candidates).isoformat() if candidates else None
 
+    role = (settings.app_role or "operator").lower().strip()
+    if role not in {"operator", "viewer"}:
+        role = "operator"
+
+    can_sync = (role == "operator") and (not settings.app_read_only)
+    if settings.app_read_only:
+        can_sync_reason = "app_read_only"
+    elif role != "operator":
+        can_sync_reason = "role_viewer"
+    else:
+        can_sync_reason = "ok"
+
     return {
         "binance": {
             "status": "configured" if (settings.binance_api_key and settings.binance_api_secret) else "mock-mode",
@@ -310,6 +322,9 @@ def diagnostics_connectors(db: Session = Depends(get_db)):
             "last_sync_at": last_sync_at,
             "server_time": datetime.now(timezone.utc).isoformat(),
             "read_only": settings.app_read_only,
+            "role": role,
+            "can_sync": can_sync,
+            "can_sync_reason": can_sync_reason,
             "token_required": bool(settings.sync_api_token),
             "min_interval_seconds": settings.sync_min_interval_seconds,
         },
