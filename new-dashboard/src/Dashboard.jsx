@@ -72,6 +72,10 @@ function Dashboard() {
   const [refreshSec, setRefreshSec] = useState('off')
   const [symbolFilter, setSymbolFilter] = useState('')
   const [tradeLimit, setTradeLimit] = useState(25)
+  const [tradeOffset, setTradeOffset] = useState(0)
+  const [tradeTotal, setTradeTotal] = useState(0)
+  const [tradeSortBy, setTradeSortBy] = useState('executed_at')
+  const [tradeSortDir, setTradeSortDir] = useState('desc')
 
   const loadBase = () => {
     Promise.all([
@@ -98,13 +102,25 @@ function Dashboard() {
   }
 
   const loadTrades = () => {
-    const params = new URLSearchParams({ limit: String(tradeLimit) })
+    const params = new URLSearchParams({
+      limit: String(tradeLimit),
+      offset: String(tradeOffset),
+      window: windowFilter,
+      sort_by: tradeSortBy,
+      sort_dir: tradeSortDir
+    })
     if (symbolFilter.trim()) params.append('symbol', symbolFilter.trim().toUpperCase())
 
     fetch(`${API_URL}/trades?${params.toString()}`)
       .then((r) => r.json())
-      .then((res) => setTrades(res?.trades || []))
-      .catch(() => setTrades([]))
+      .then((res) => {
+        setTrades(res?.trades || [])
+        setTradeTotal(res?.total || 0)
+      })
+      .catch(() => {
+        setTrades([])
+        setTradeTotal(0)
+      })
   }
 
   const syncNow = async () => {
@@ -124,8 +140,12 @@ function Dashboard() {
   }, [windowFilter])
 
   useEffect(() => {
+    setTradeOffset(0)
+  }, [symbolFilter, tradeLimit, windowFilter, tradeSortBy, tradeSortDir])
+
+  useEffect(() => {
     loadTrades()
-  }, [symbolFilter, tradeLimit])
+  }, [symbolFilter, tradeLimit, tradeOffset, windowFilter, tradeSortBy, tradeSortDir])
 
   useEffect(() => {
     if (refreshSec === 'off') return undefined
@@ -135,7 +155,7 @@ function Dashboard() {
       loadTrades()
     }, ms)
     return () => clearInterval(id)
-  }, [refreshSec, windowFilter, symbolFilter, tradeLimit])
+  }, [refreshSec, windowFilter, symbolFilter, tradeLimit, tradeOffset, tradeSortBy, tradeSortDir])
 
   const ddColor = useMemo(() => ((stats?.max_drawdown_pct || 0) > ALERT_THRESHOLDS.ddPct ? '#ff3131' : '#ffae00'), [stats])
 
@@ -241,6 +261,15 @@ function Dashboard() {
               <option value={50}>50</option>
               <option value={100}>100</option>
             </select>
+            <select value={tradeSortBy} onChange={(e) => setTradeSortBy(e.target.value)} style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}>
+              <option value='executed_at'>Sort: time</option>
+              <option value='realized_pnl'>Sort: rPnL</option>
+              <option value='symbol'>Sort: symbol</option>
+            </select>
+            <select value={tradeSortDir} onChange={(e) => setTradeSortDir(e.target.value)} style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}>
+              <option value='desc'>Desc</option>
+              <option value='asc'>Asc</option>
+            </select>
             <button onClick={loadTrades} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>Refresh</button>
             <button onClick={() => exportCsv('trades.csv', trades)} style={{ background: '#8ab4ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>Export CSV</button>
           </div>
@@ -273,6 +302,28 @@ function Dashboard() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, color: '#b7bbd8' }}>
+          <span>
+            Showing {tradeTotal === 0 ? 0 : tradeOffset + 1} - {Math.min(tradeOffset + tradeLimit, tradeTotal)} of {tradeTotal}
+          </span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setTradeOffset(Math.max(0, tradeOffset - tradeLimit))}
+              disabled={tradeOffset === 0}
+              style={{ background: '#1a1a2e', color: '#fff', border: '1px solid #2a2a3f', borderRadius: 8, padding: '6px 10px', opacity: tradeOffset === 0 ? 0.5 : 1 }}
+            >
+              Prev
+            </button>
+            <button
+              onClick={() => setTradeOffset(tradeOffset + tradeLimit)}
+              disabled={tradeOffset + tradeLimit >= tradeTotal}
+              style={{ background: '#1a1a2e', color: '#fff', border: '1px solid #2a2a3f', borderRadius: 8, padding: '6px 10px', opacity: tradeOffset + tradeLimit >= tradeTotal ? 0.5 : 1 }}
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
 

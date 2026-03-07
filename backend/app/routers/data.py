@@ -131,15 +131,35 @@ def get_risk_exposure(db: Session = Depends(get_db)):
 @router.get("/trades")
 def get_trades(
     limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     symbol: str | None = Query(default=None, min_length=3, max_length=20),
+    window: str | None = Query(default=None, pattern="^(24h|7d|30d)$"),
+    sort_by: str = Query(default="executed_at", pattern="^(executed_at|symbol|realized_pnl)$"),
+    sort_dir: str = Query(default="desc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
 ):
     q = db.query(Trade)
     if symbol:
         q = q.filter(Trade.symbol == symbol.upper())
+    if window:
+        since = datetime.now(timezone.utc) - _parse_window(window)
+        q = q.filter(Trade.executed_at >= since)
 
-    trades = q.order_by(Trade.executed_at.desc()).limit(limit).all()
+    total = q.count()
+
+    sort_map = {
+        "executed_at": Trade.executed_at,
+        "symbol": Trade.symbol,
+        "realized_pnl": Trade.realized_pnl,
+    }
+    sort_col = sort_map[sort_by]
+    order_expr = sort_col.asc() if sort_dir == "asc" else sort_col.desc()
+
+    trades = q.order_by(order_expr).offset(offset).limit(limit).all()
     return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
         "trades": [
             {
                 "id": t.id,
