@@ -78,6 +78,10 @@ function Dashboard() {
   const [tradeSortBy, setTradeSortBy] = useState('executed_at')
   const [tradeSortDir, setTradeSortDir] = useState('desc')
 
+  const [positionSideFilter, setPositionSideFilter] = useState('ALL')
+  const [positionSortBy, setPositionSortBy] = useState('notional_usd')
+  const [positionSortDir, setPositionSortDir] = useState('desc')
+
   const loadBase = () => {
     Promise.all([
       fetch(`${API_URL}/stats/overview?window=${windowFilter}`).then((r) => r.json()),
@@ -189,6 +193,26 @@ function Dashboard() {
 
     return { longNotional, shortNotional, top }
   }, [positions])
+
+  const visiblePositions = useMemo(() => {
+    const filtered = positions.filter((p) => positionSideFilter === 'ALL' || p.side === positionSideFilter)
+
+    const val = (p) => {
+      if (positionSortBy === 'symbol') return String(p.symbol || '')
+      return Number(p[positionSortBy] || 0)
+    }
+
+    filtered.sort((a, b) => {
+      const av = val(a)
+      const bv = val(b)
+      if (typeof av === 'string' || typeof bv === 'string') {
+        return positionSortDir === 'asc' ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av))
+      }
+      return positionSortDir === 'asc' ? av - bv : bv - av
+    })
+
+    return filtered
+  }, [positions, positionSideFilter, positionSortBy, positionSortDir])
 
   return (
     <div style={{ minHeight: '100vh', background: '#0a0a0f', color: 'white', padding: 24 }}>
@@ -360,7 +384,24 @@ function Dashboard() {
       <div style={panelStyle()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <h3 style={{ marginTop: 0, color: '#c8c8ff', marginBottom: 0 }}>Positions</h3>
-          <button onClick={() => exportCsv('positions.csv', positions)} style={{ background: '#8ab4ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>Export CSV</button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <select value={positionSideFilter} onChange={(e) => setPositionSideFilter(e.target.value)} style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}>
+              <option value='ALL'>Side: ALL</option>
+              <option value='LONG'>Side: LONG</option>
+              <option value='SHORT'>Side: SHORT</option>
+            </select>
+            <select value={positionSortBy} onChange={(e) => setPositionSortBy(e.target.value)} style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}>
+              <option value='notional_usd'>Sort: notional</option>
+              <option value='unrealized_pnl'>Sort: uPnL</option>
+              <option value='leverage'>Sort: leverage</option>
+              <option value='symbol'>Sort: symbol</option>
+            </select>
+            <select value={positionSortDir} onChange={(e) => setPositionSortDir(e.target.value)} style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}>
+              <option value='desc'>Desc</option>
+              <option value='asc'>Asc</option>
+            </select>
+            <button onClick={() => exportCsv('positions.csv', visiblePositions)} style={{ background: '#8ab4ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>Export CSV</button>
+          </div>
         </div>
         <div style={{ marginTop: 10, overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -377,18 +418,21 @@ function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {positions.map((p) => (
-                <tr key={`${p.symbol}-${p.id}`} style={{ borderBottom: '1px solid #1c1c2b' }}>
-                  <td style={{ padding: 8 }}>{p.symbol}</td>
-                  <td style={{ padding: 8, color: p.side === 'LONG' ? '#39ff14' : '#ff6b6b' }}>{p.side}</td>
-                  <td style={{ padding: 8 }}>{Number(p.position_amt).toFixed(4)}</td>
-                  <td style={{ padding: 8 }}>{Number(p.entry_price).toFixed(4)}</td>
-                  <td style={{ padding: 8 }}>{Number(p.mark_price).toFixed(4)}</td>
-                  <td style={{ padding: 8 }}>${Number(p.notional_usd).toFixed(2)}</td>
-                  <td style={{ padding: 8 }}>{p.leverage}x</td>
-                  <td style={{ padding: 8, color: Number(p.unrealized_pnl) >= 0 ? '#39ff14' : '#ff6b6b' }}>${Number(p.unrealized_pnl).toFixed(2)}</td>
-                </tr>
-              ))}
+              {visiblePositions.map((p) => {
+                const isTop = p.symbol === positionSummary.top.symbol
+                return (
+                  <tr key={`${p.symbol}-${p.id}`} style={{ borderBottom: '1px solid #1c1c2b', background: isTop ? '#2b2414' : 'transparent' }}>
+                    <td style={{ padding: 8 }}>{p.symbol}{isTop ? ' ⭐' : ''}</td>
+                    <td style={{ padding: 8, color: p.side === 'LONG' ? '#39ff14' : '#ff6b6b' }}>{p.side}</td>
+                    <td style={{ padding: 8 }}>{Number(p.position_amt).toFixed(4)}</td>
+                    <td style={{ padding: 8 }}>{Number(p.entry_price).toFixed(4)}</td>
+                    <td style={{ padding: 8 }}>{Number(p.mark_price).toFixed(4)}</td>
+                    <td style={{ padding: 8 }}>${Number(p.notional_usd).toFixed(2)}</td>
+                    <td style={{ padding: 8 }}>{p.leverage}x</td>
+                    <td style={{ padding: 8, color: Number(p.unrealized_pnl) >= 0 ? '#39ff14' : '#ff6b6b' }}>${Number(p.unrealized_pnl).toFixed(2)}</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

@@ -12,7 +12,7 @@
 - [x] Endpoint risk `/risk/exposure`
 - [x] Cards DD / Gross exposure / concentration
 - [x] Table trades avec filtres (symbol, time/window) + tri + pagination
-- [~] Table positions enrichie (notional livré, liq price/margin mode en attente)
+- [~] Table positions enrichie (notional + tri + filtre side livrés, liq price/margin mode en attente)
 - [x] Diagnostics connecteurs + erreurs visibles (endpoint backend)
 
 ## S1.5 — V1.2 UX/ops (livré)
