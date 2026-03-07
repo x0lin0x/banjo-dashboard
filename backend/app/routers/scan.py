@@ -9,14 +9,17 @@ router = APIRouter(prefix="/api/v1", tags=["scan"])
 
 @router.post("/sync/scan-all-symbols")
 def scan_all_symbols(limit: int = 1000, _: None = Depends(require_sync_access), db: Session = Depends(get_db)):
-    """Scan all symbols with positions and sync trades."""
-    # Get all unique symbols from positions
-    positions = db.query(Position.symbol).distinct().all()
-    symbols = [p[0] for p in positions]
-    
+    """Sync trades for currently active position symbols only.
+
+    Active = non-zero position amount, which avoids scanning hundreds of dormant symbols
+    stored in local DB history.
+    """
+    raw_positions = db.query(Position).all()
+    symbols = sorted({p.symbol for p in raw_positions if abs(float(p.position_amt or 0)) > 0})
+
     total_inserted = 0
     results = []
-    
+
     for symbol in symbols:
         try:
             inserted = binance_sync_service.sync_trades(db=db, symbol=symbol, limit=limit)
@@ -24,10 +27,10 @@ def scan_all_symbols(limit: int = 1000, _: None = Depends(require_sync_access), 
             results.append({"symbol": symbol, "inserted": inserted})
         except Exception as e:
             results.append({"symbol": symbol, "error": str(e)})
-    
+
     return {
         "status": "ok",
         "symbols_scanned": len(symbols),
         "total_trades_inserted": total_inserted,
-        "results": results
+        "results": results,
     }

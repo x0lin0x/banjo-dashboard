@@ -195,11 +195,16 @@ function Dashboard() {
   const syncNow = async () => {
     setSyncing(true)
     setSyncError('')
+    let timeoutId
     try {
       const headers = {}
       if (syncToken.trim()) headers['X-API-Token'] = syncToken.trim()
 
-      const res = await fetch(`${API_URL}/sync/scan-all-symbols?limit=200`, { method: 'POST', headers })
+      const controller = new AbortController()
+      timeoutId = setTimeout(() => controller.abort(), 90000)
+
+      const res = await fetch(`${API_URL}/sync/scan-all-symbols?limit=200`, { method: 'POST', headers, signal: controller.signal })
+
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}))
         throw new Error(payload?.detail || `Sync failed (${res.status})`)
@@ -209,8 +214,13 @@ function Dashboard() {
       loadAuditTradesMeta()
       loadSyncEvents()
     } catch (err) {
-      setSyncError(err?.message || 'Sync failed')
+      if (err?.name === 'AbortError') {
+        setSyncError('Sync timeout after 90s. Reduce symbols or retry.')
+      } else {
+        setSyncError(err?.message || 'Sync failed')
+      }
     } finally {
+      if (timeoutId) clearTimeout(timeoutId)
       setSyncing(false)
     }
   }
