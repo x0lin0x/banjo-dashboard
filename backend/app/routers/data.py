@@ -171,6 +171,8 @@ def get_trades(
                 "realized_pnl": float(t.realized_pnl or 0),
                 "commission": float(t.commission or 0),
                 "executed_at": t.executed_at.isoformat(),
+                "signal_id": getattr(t, "signal_id", None),
+                "decision_id": getattr(t, "decision_id", None),
             }
             for t in trades
         ]

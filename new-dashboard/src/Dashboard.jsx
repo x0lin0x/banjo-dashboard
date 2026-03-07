@@ -386,6 +386,8 @@ function Dashboard() {
                 <th style={{ padding: 8 }}>Qty</th>
                 <th style={{ padding: 8 }}>Fee</th>
                 <th style={{ padding: 8 }}>rPnL</th>
+                <th style={{ padding: 8 }}>Signal ID</th>
+                <th style={{ padding: 8 }}>Decision ID</th>
               </tr>
             </thead>
             <tbody>
@@ -398,6 +400,8 @@ function Dashboard() {
                   <td style={{ padding: 8 }}>{Number(t.qty).toFixed(4)}</td>
                   <td style={{ padding: 8 }}>{Number(t.commission || 0).toFixed(4)}</td>
                   <td style={{ padding: 8, color: Number(t.realized_pnl) >= 0 ? '#39ff14' : '#ff6b6b' }}>{Number(t.realized_pnl).toFixed(4)}</td>
+                  <td style={{ padding: 8, color: '#b7bbd8' }}>{t.signal_id ?? '-'}</td>
+                  <td style={{ padding: 8, color: '#b7bbd8' }}>{t.decision_id ?? '-'}</td>
                 </tr>
               ))}
             </tbody>
