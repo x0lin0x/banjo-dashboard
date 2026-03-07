@@ -24,6 +24,94 @@ def _parse_window(window: str) -> timedelta:
     return mapping.get(window, timedelta(days=30))
 
 
+def _aggregate_trade_fills(trades: list[Trade]) -> list[dict]:
+    grouped: dict[str, dict] = {}
+
+    for t in trades:
+        group_key = f"order:{t.order_id}" if t.order_id else f"trade:{t.binance_trade_id}"
+        qty = float(t.qty or 0)
+        price = float(t.price or 0)
+        quote = float(t.quote_qty or 0)
+
+        if group_key not in grouped:
+            grouped[group_key] = {
+                "id": group_key,
+                "binance_trade_id": t.binance_trade_id,
+                "order_id": t.order_id,
+                "symbol": t.symbol,
+                "side": t.side,
+                "qty": 0.0,
+                "quote_qty": 0.0,
+                "commission": 0.0,
+                "realized_pnl": 0.0,
+                "price_weighted_sum": 0.0,
+                "executed_at": t.executed_at,
+                "signal_id": getattr(t, "signal_id", None),
+                "decision_id": getattr(t, "decision_id", None),
+                "fills_count": 0,
+            }
+
+        row = grouped[group_key]
+        row["qty"] += qty
+        row["quote_qty"] += quote
+        row["commission"] += float(t.commission or 0)
+        row["realized_pnl"] += float(t.realized_pnl or 0)
+        row["price_weighted_sum"] += price * qty
+        row["fills_count"] += 1
+
+        if t.executed_at and t.executed_at < row["executed_at"]:
+            row["executed_at"] = t.executed_at
+
+    out = []
+    for row in grouped.values():
+        qty = row["qty"]
+        avg_price = (row["price_weighted_sum"] / qty) if qty > 0 else 0.0
+        out.append(
+            {
+                "id": row["id"],
+                "binance_trade_id": row["binance_trade_id"],
+                "order_id": row["order_id"],
+                "symbol": row["symbol"],
+                "side": row["side"],
+                "price": avg_price,
+                "qty": row["qty"],
+                "quote_qty": row["quote_qty"],
+                "realized_pnl": row["realized_pnl"],
+                "commission": row["commission"],
+                "executed_at": row["executed_at"],
+                "signal_id": row["signal_id"],
+                "decision_id": row["decision_id"],
+                "fills_count": row["fills_count"],
+            }
+        )
+
+    return out
+
+
+def _count_closed_positions(orders: list[dict]) -> int:
+    # Approximation from window-local trade flow:
+    # count transitions where symbol net position returns to/crosses zero.
+    net_by_symbol: dict[str, float] = defaultdict(float)
+    closed = 0
+
+    for o in sorted(orders, key=lambda x: x["executed_at"]):
+        symbol = o["symbol"]
+        qty = float(o.get("qty") or 0)
+        side = str(o.get("side") or "BUY").upper()
+        signed = qty if side == "BUY" else -qty
+
+        prev = net_by_symbol[symbol]
+        new = prev + signed
+
+        crossed_zero = (prev > 0 and new <= 0) or (prev < 0 and new >= 0)
+        if prev != 0 and crossed_zero:
+            closed += 1
+
+        net_by_symbol[symbol] = new
+
+    return closed
+
+
 @router.get("/stats/overview")
 def get_stats_overview(
     window: str = Query(default="30d", pattern="^(24h|7d|30d)$"),
@@ -33,8 +121,6 @@ def get_stats_overview(
     active_positions = [p for p in all_positions if abs(float(p.position_amt) * float(p.mark_price)) > 0]
     total_positions = len(active_positions)
     total_unrealized_pnl = float(sum(float(p.unrealized_pnl or 0) for p in active_positions))
-
-    equity = total_realized_pnl + total_unrealized_pnl
 
     margin_used_positions = 0.0
     for p in active_positions:
@@ -75,8 +161,10 @@ def get_stats_overview(
 
     # Window-aware metrics/counters
     total_realized_pnl = float(sum(float(t.realized_pnl or 0) for t in window_trades))
-    total_trades = len(window_trades)
-    total_closed_trades = sum(1 for t in window_trades if abs(float(t.realized_pnl or 0)) > 0)
+    aggregated_orders = _aggregate_trade_fills(window_trades)
+    total_trades = len(aggregated_orders)
+    total_closed_trades = _count_closed_positions(aggregated_orders)
+    equity = total_realized_pnl + total_unrealized_pnl
 
     return {
         "total_trades": total_trades,
@@ -183,36 +271,40 @@ def get_trades(
         since = datetime.now(timezone.utc) - _parse_window(window)
         q = q.filter(Trade.executed_at >= since)
 
-    total = q.count()
+    raw = q.order_by(Trade.executed_at.asc()).all()
+    aggregated = _aggregate_trade_fills(raw)
 
-    sort_map = {
-        "executed_at": Trade.executed_at,
-        "symbol": Trade.symbol,
-        "realized_pnl": Trade.realized_pnl,
-    }
-    sort_col = sort_map[sort_by]
-    order_expr = sort_col.asc() if sort_dir == "asc" else sort_col.desc()
+    if sort_by == "symbol":
+        aggregated.sort(key=lambda x: x["symbol"], reverse=(sort_dir == "desc"))
+    elif sort_by == "realized_pnl":
+        aggregated.sort(key=lambda x: float(x["realized_pnl"]), reverse=(sort_dir == "desc"))
+    else:
+        aggregated.sort(key=lambda x: x["executed_at"], reverse=(sort_dir == "desc"))
 
-    trades = q.order_by(order_expr).offset(offset).limit(limit).all()
+    total = len(aggregated)
+    page = aggregated[offset: offset + limit]
+
     return {
         "total": total,
         "limit": limit,
         "offset": offset,
         "trades": [
             {
-                "id": t.id,
-                "binance_trade_id": t.binance_trade_id,
-                "symbol": t.symbol,
-                "side": t.side,
-                "price": float(t.price),
-                "qty": float(t.qty),
-                "realized_pnl": float(t.realized_pnl or 0),
-                "commission": float(t.commission or 0),
-                "executed_at": t.executed_at.isoformat(),
-                "signal_id": getattr(t, "signal_id", None),
-                "decision_id": getattr(t, "decision_id", None),
+                "id": t["id"],
+                "binance_trade_id": t["binance_trade_id"],
+                "order_id": t["order_id"],
+                "symbol": t["symbol"],
+                "side": t["side"],
+                "price": float(t["price"]),
+                "qty": float(t["qty"]),
+                "realized_pnl": float(t["realized_pnl"]),
+                "commission": float(t["commission"]),
+                "fills_count": int(t["fills_count"]),
+                "executed_at": t["executed_at"].isoformat(),
+                "signal_id": t.get("signal_id"),
+                "decision_id": t.get("decision_id"),
             }
-            for t in trades
+            for t in page
         ]
     }
 

@@ -430,7 +430,7 @@ function Dashboard() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 24 }}>
         <Card label='POSITIONS' value={stats?.total_positions ?? 0} color='#b026ff' />
-        <Card label='CLOSED TRADES' value={stats?.total_closed_trades ?? stats?.total_trades ?? 0} color='#00f3ff' />
+        <Card label='CLOSED POSITIONS' value={stats?.total_closed_trades ?? stats?.total_trades ?? 0} color='#00f3ff' />
         <Card label='REALIZED P&L' value={`$${(stats?.total_realized_pnl ?? 0).toFixed?.(2) ?? '0.00'}`} color={(stats?.total_realized_pnl ?? 0) >= 0 ? '#39ff14' : '#ff3131'} />
         <Card label='UNREALIZED P&L' value={`$${(stats?.total_unrealized_pnl ?? 0).toFixed?.(2) ?? '0.00'}`} color={(stats?.total_unrealized_pnl ?? 0) >= 0 ? '#39ff14' : '#ff3131'} />
       </div>
@@ -522,6 +522,7 @@ function Dashboard() {
                 <th style={{ padding: 8 }}>Side</th>
                 <th style={{ padding: 8 }}>Price</th>
                 <th style={{ padding: 8 }}>Qty</th>
+                <th style={{ padding: 8 }}>Fills</th>
                 <th style={{ padding: 8 }}>Fee</th>
                 <th style={{ padding: 8 }}>rPnL</th>
                 <th style={{ padding: 8 }}>Signal ID</th>
@@ -536,6 +537,7 @@ function Dashboard() {
                   <td style={{ padding: 8, color: t.side === 'BUY' ? '#39ff14' : '#ff6b6b' }}>{t.side}</td>
                   <td style={{ padding: 8 }}>{Number(t.price).toFixed(4)}</td>
                   <td style={{ padding: 8 }}>{Number(t.qty).toFixed(4)}</td>
+                  <td style={{ padding: 8 }}>{t.fills_count ?? 1}</td>
                   <td style={{ padding: 8 }}>{Number(t.commission || 0).toFixed(4)}</td>
                   <td style={{ padding: 8, color: Number(t.realized_pnl) >= 0 ? '#39ff14' : '#ff6b6b' }}>{Number(t.realized_pnl).toFixed(4)}</td>
                   <td style={{ padding: 8, color: '#b7bbd8' }}>{t.signal_id ?? '-'}</td>
