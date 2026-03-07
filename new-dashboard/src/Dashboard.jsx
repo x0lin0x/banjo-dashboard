@@ -203,7 +203,7 @@ function Dashboard() {
       const controller = new AbortController()
       timeoutId = setTimeout(() => controller.abort(), 90000)
 
-      const res = await fetch(`${API_URL}/sync/scan-all-symbols?limit=200`, { method: 'POST', headers, signal: controller.signal })
+      const res = await fetch(`${API_URL}/sync/scan-all-symbols?limit=120&per_symbol_delay_ms=250`, { method: 'POST', headers, signal: controller.signal })
 
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}))

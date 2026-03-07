@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import time
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -12,8 +13,9 @@ router = APIRouter(prefix="/api/v1", tags=["scan"])
 
 @router.post("/sync/scan-all-symbols")
 def scan_all_symbols(
-    limit: int = Query(default=200, ge=1, le=1000),
+    limit: int = Query(default=120, ge=1, le=1000),
     lookback_days: int = Query(default=7, ge=1, le=30),
+    per_symbol_delay_ms: int = Query(default=250, ge=0, le=3000),
     symbols: str | None = Query(default=None, description="Optional CSV symbols to force scan, ex: ETHUSDT,SOLUSDT"),
     _: None = Depends(require_sync_access),
     db: Session = Depends(get_db),
@@ -46,7 +48,10 @@ def scan_all_symbols(
     total_inserted = 0
     results = []
 
-    for symbol in symbols_to_scan:
+    for idx, symbol in enumerate(symbols_to_scan):
+        if idx > 0 and per_symbol_delay_ms > 0:
+            time.sleep(per_symbol_delay_ms / 1000)
+
         try:
             inserted = binance_sync_service.sync_trades(db=db, symbol=symbol, limit=limit)
             total_inserted += inserted
