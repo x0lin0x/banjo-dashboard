@@ -400,140 +400,6 @@ function Dashboard() {
         </div>
       </div>
 
-      <div style={panelStyle()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <h3 style={{ marginTop: 0, color: '#c8c8ff', marginBottom: 0 }}>Last sync events</h3>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <input
-              value={syncEventsFilterEndpoint}
-              onChange={(e) => {
-                setSyncEventsMeta((p) => ({ ...p, offset: 0 }))
-                setSyncEventsFilterEndpoint(e.target.value)
-              }}
-              placeholder='Filter endpoint (ex: sync/all)'
-              style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}
-            />
-            <select
-              value={syncEventsFilterStatus}
-              onChange={(e) => {
-                setSyncEventsMeta((p) => ({ ...p, offset: 0 }))
-                setSyncEventsFilterStatus(e.target.value)
-              }}
-              style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}
-            >
-              <option value=''>Status: all</option>
-              <option value='ok'>Status: ok</option>
-              <option value='error'>Status: error</option>
-            </select>
-            <select
-              value={syncEventsMeta.limit}
-              onChange={(e) => setSyncEventsMeta((p) => ({ ...p, limit: Number(e.target.value), offset: 0 }))}
-              style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}
-            >
-              <option value={8}>Rows 8</option>
-              <option value={20}>Rows 20</option>
-              <option value={50}>Rows 50</option>
-            </select>
-            <button onClick={() => window.open(`${API_URL}/sync/events.csv?${new URLSearchParams({ endpoint: syncEventsFilterEndpoint || '', status: syncEventsFilterStatus || '' }).toString()}`, '_blank')} style={{ background: '#8ab4ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>
-              Export events CSV
-            </button>
-          </div>
-        </div>
-        <div style={{ overflowX: 'auto', marginTop: 10 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ color: '#8b8ba7', textAlign: 'left', borderBottom: '1px solid #2a2a3f' }}>
-                <th style={{ padding: 8 }}>Time</th>
-                <th style={{ padding: 8 }}>Endpoint</th>
-                <th style={{ padding: 8 }}>Status</th>
-                <th style={{ padding: 8 }}>Actor</th>
-                <th style={{ padding: 8 }}>Symbol</th>
-                <th style={{ padding: 8 }}>Duration</th>
-                <th style={{ padding: 8 }}>Detail</th>
-              </tr>
-            </thead>
-            <tbody>
-              {syncEvents.map((e) => (
-                <tr key={e.id} style={{ borderBottom: '1px solid #1c1c2b' }}>
-                  <td style={{ padding: 8 }}>{e.created_at ? new Date(e.created_at).toLocaleString() : '-'}</td>
-                  <td style={{ padding: 8 }}>{e.endpoint}</td>
-                  <td style={{ padding: 8, color: e.status === 'ok' ? '#39ff14' : '#ff6b6b' }}>{e.status}</td>
-                  <td style={{ padding: 8 }}>{e.actor || '-'}</td>
-                  <td style={{ padding: 8 }}>{e.symbol || '-'}</td>
-                  <td style={{ padding: 8 }}>{e.duration_ms ?? '-'} ms</td>
-                  <td style={{ padding: 8, color: '#b7bbd8' }}>{e.detail || '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, color: '#b7bbd8' }}>
-          <span>
-            Showing {syncEventsMeta.total === 0 ? 0 : syncEventsMeta.offset + 1} - {Math.min(syncEventsMeta.offset + syncEventsMeta.limit, syncEventsMeta.total)} of {syncEventsMeta.total}
-          </span>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={() => setSyncEventsMeta((p) => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}
-              disabled={syncEventsMeta.offset === 0}
-              style={{ background: '#1a1a2e', color: '#fff', border: '1px solid #2a2a3f', borderRadius: 8, padding: '6px 10px', opacity: syncEventsMeta.offset === 0 ? 0.5 : 1 }}
-            >
-              Prev
-            </button>
-            <button
-              onClick={() => setSyncEventsMeta((p) => ({ ...p, offset: p.offset + p.limit }))}
-              disabled={syncEventsMeta.offset + syncEventsMeta.limit >= syncEventsMeta.total}
-              style={{ background: '#1a1a2e', color: '#fff', border: '1px solid #2a2a3f', borderRadius: 8, padding: '6px 10px', opacity: syncEventsMeta.offset + syncEventsMeta.limit >= syncEventsMeta.total ? 0.5 : 1 }}
-            >
-              Next
-            </button>
-            <button onClick={loadSyncEvents} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '6px 10px', fontWeight: 700 }}>Refresh</button>
-          </div>
-        </div>
-      </div>
-
-      <div style={panelStyle()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <h3 style={{ marginTop: 0, color: '#c8c8ff', marginBottom: 0 }}>Audit summary ({windowFilter})</h3>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <select value={auditTradesMeta.limit} onChange={(e) => setAuditTradesMeta((p) => ({ ...p, limit: Number(e.target.value), offset: 0 }))} style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}>
-              <option value={25}>Page 25</option>
-              <option value={50}>Page 50</option>
-              <option value={100}>Page 100</option>
-            </select>
-            <button onClick={() => window.open(`${API_URL}/audit/trades.csv?window=${windowFilter}`, '_blank')} style={{ background: '#8ab4ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>Export audit CSV (backend)</button>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', color: '#cfd3ff', marginTop: 10 }}>
-          <span>Trades: <strong>{audit?.trades_count ?? 0}</strong></span>
-          <span>Realized PnL: <strong>{audit?.total_realized_pnl ?? 0}</strong></span>
-          <span>Fees: <strong>{audit?.total_fees ?? 0}</strong></span>
-          <span>Global checksum: <strong style={{ fontFamily: 'monospace' }}>{(audit?.checksum_sha256 || 'n/a').slice(0, 16)}...</strong></span>
-          <span>Page checksum: <strong style={{ fontFamily: 'monospace' }}>{(auditTradesMeta?.checksum || 'n/a').slice(0, 16)}...</strong></span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, color: '#b7bbd8' }}>
-          <span>
-            Page {auditTradesMeta.total === 0 ? 0 : Math.floor(auditTradesMeta.offset / auditTradesMeta.limit) + 1} / {Math.max(1, Math.ceil((auditTradesMeta.total || 0) / auditTradesMeta.limit))}
-          </span>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={() => setAuditTradesMeta((p) => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}
-              disabled={auditTradesMeta.offset === 0}
-              style={{ background: '#1a1a2e', color: '#fff', border: '1px solid #2a2a3f', borderRadius: 8, padding: '6px 10px', opacity: auditTradesMeta.offset === 0 ? 0.5 : 1 }}
-            >
-              Prev
-            </button>
-            <button
-              onClick={() => setAuditTradesMeta((p) => ({ ...p, offset: p.offset + p.limit }))}
-              disabled={auditTradesMeta.offset + auditTradesMeta.limit >= auditTradesMeta.total}
-              style={{ background: '#1a1a2e', color: '#fff', border: '1px solid #2a2a3f', borderRadius: 8, padding: '6px 10px', opacity: auditTradesMeta.offset + auditTradesMeta.limit >= auditTradesMeta.total ? 0.5 : 1 }}
-            >
-              Next
-            </button>
-            <button onClick={loadAuditTradesMeta} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '6px 10px', fontWeight: 700 }}>Refresh page checksum</button>
-          </div>
-        </div>
-      </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 24 }}>
         <Card label='POSITIONS' value={stats?.total_positions ?? 0} color='#b026ff' />
         <Card label='TRADES' value={stats?.total_trades ?? 0} color='#00f3ff' />
@@ -729,6 +595,140 @@ function Dashboard() {
               })}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div style={panelStyle()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <h3 style={{ marginTop: 0, color: '#c8c8ff', marginBottom: 0 }}>Last sync events</h3>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input
+              value={syncEventsFilterEndpoint}
+              onChange={(e) => {
+                setSyncEventsMeta((p) => ({ ...p, offset: 0 }))
+                setSyncEventsFilterEndpoint(e.target.value)
+              }}
+              placeholder='Filter endpoint (ex: sync/all)'
+              style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}
+            />
+            <select
+              value={syncEventsFilterStatus}
+              onChange={(e) => {
+                setSyncEventsMeta((p) => ({ ...p, offset: 0 }))
+                setSyncEventsFilterStatus(e.target.value)
+              }}
+              style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}
+            >
+              <option value=''>Status: all</option>
+              <option value='ok'>Status: ok</option>
+              <option value='error'>Status: error</option>
+            </select>
+            <select
+              value={syncEventsMeta.limit}
+              onChange={(e) => setSyncEventsMeta((p) => ({ ...p, limit: Number(e.target.value), offset: 0 }))}
+              style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}
+            >
+              <option value={8}>Rows 8</option>
+              <option value={20}>Rows 20</option>
+              <option value={50}>Rows 50</option>
+            </select>
+            <button onClick={() => window.open(`${API_URL}/sync/events.csv?${new URLSearchParams({ endpoint: syncEventsFilterEndpoint || '', status: syncEventsFilterStatus || '' }).toString()}`, '_blank')} style={{ background: '#8ab4ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>
+              Export events CSV
+            </button>
+          </div>
+        </div>
+        <div style={{ overflowX: 'auto', marginTop: 10 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ color: '#8b8ba7', textAlign: 'left', borderBottom: '1px solid #2a2a3f' }}>
+                <th style={{ padding: 8 }}>Time</th>
+                <th style={{ padding: 8 }}>Endpoint</th>
+                <th style={{ padding: 8 }}>Status</th>
+                <th style={{ padding: 8 }}>Actor</th>
+                <th style={{ padding: 8 }}>Symbol</th>
+                <th style={{ padding: 8 }}>Duration</th>
+                <th style={{ padding: 8 }}>Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              {syncEvents.map((e) => (
+                <tr key={e.id} style={{ borderBottom: '1px solid #1c1c2b' }}>
+                  <td style={{ padding: 8 }}>{e.created_at ? new Date(e.created_at).toLocaleString() : '-'}</td>
+                  <td style={{ padding: 8 }}>{e.endpoint}</td>
+                  <td style={{ padding: 8, color: e.status === 'ok' ? '#39ff14' : '#ff6b6b' }}>{e.status}</td>
+                  <td style={{ padding: 8 }}>{e.actor || '-'}</td>
+                  <td style={{ padding: 8 }}>{e.symbol || '-'}</td>
+                  <td style={{ padding: 8 }}>{e.duration_ms ?? '-'} ms</td>
+                  <td style={{ padding: 8, color: '#b7bbd8' }}>{e.detail || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, color: '#b7bbd8' }}>
+          <span>
+            Showing {syncEventsMeta.total === 0 ? 0 : syncEventsMeta.offset + 1} - {Math.min(syncEventsMeta.offset + syncEventsMeta.limit, syncEventsMeta.total)} of {syncEventsMeta.total}
+          </span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setSyncEventsMeta((p) => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}
+              disabled={syncEventsMeta.offset === 0}
+              style={{ background: '#1a1a2e', color: '#fff', border: '1px solid #2a2a3f', borderRadius: 8, padding: '6px 10px', opacity: syncEventsMeta.offset === 0 ? 0.5 : 1 }}
+            >
+              Prev
+            </button>
+            <button
+              onClick={() => setSyncEventsMeta((p) => ({ ...p, offset: p.offset + p.limit }))}
+              disabled={syncEventsMeta.offset + syncEventsMeta.limit >= syncEventsMeta.total}
+              style={{ background: '#1a1a2e', color: '#fff', border: '1px solid #2a2a3f', borderRadius: 8, padding: '6px 10px', opacity: syncEventsMeta.offset + syncEventsMeta.limit >= syncEventsMeta.total ? 0.5 : 1 }}
+            >
+              Next
+            </button>
+            <button onClick={loadSyncEvents} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '6px 10px', fontWeight: 700 }}>Refresh</button>
+          </div>
+        </div>
+      </div>
+
+      <div style={panelStyle()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <h3 style={{ marginTop: 0, color: '#c8c8ff', marginBottom: 0 }}>Audit summary ({windowFilter})</h3>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <select value={auditTradesMeta.limit} onChange={(e) => setAuditTradesMeta((p) => ({ ...p, limit: Number(e.target.value), offset: 0 }))} style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}>
+              <option value={25}>Page 25</option>
+              <option value={50}>Page 50</option>
+              <option value={100}>Page 100</option>
+            </select>
+            <button onClick={() => window.open(`${API_URL}/audit/trades.csv?window=${windowFilter}`, '_blank')} style={{ background: '#8ab4ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>Export audit CSV (backend)</button>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', color: '#cfd3ff', marginTop: 10 }}>
+          <span>Trades: <strong>{audit?.trades_count ?? 0}</strong></span>
+          <span>Realized PnL: <strong>{audit?.total_realized_pnl ?? 0}</strong></span>
+          <span>Fees: <strong>{audit?.total_fees ?? 0}</strong></span>
+          <span>Global checksum: <strong style={{ fontFamily: 'monospace' }}>{(audit?.checksum_sha256 || 'n/a').slice(0, 16)}...</strong></span>
+          <span>Page checksum: <strong style={{ fontFamily: 'monospace' }}>{(auditTradesMeta?.checksum || 'n/a').slice(0, 16)}...</strong></span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, color: '#b7bbd8' }}>
+          <span>
+            Page {auditTradesMeta.total === 0 ? 0 : Math.floor(auditTradesMeta.offset / auditTradesMeta.limit) + 1} / {Math.max(1, Math.ceil((auditTradesMeta.total || 0) / auditTradesMeta.limit))}
+          </span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setAuditTradesMeta((p) => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}
+              disabled={auditTradesMeta.offset === 0}
+              style={{ background: '#1a1a2e', color: '#fff', border: '1px solid #2a2a3f', borderRadius: 8, padding: '6px 10px', opacity: auditTradesMeta.offset === 0 ? 0.5 : 1 }}
+            >
+              Prev
+            </button>
+            <button
+              onClick={() => setAuditTradesMeta((p) => ({ ...p, offset: p.offset + p.limit }))}
+              disabled={auditTradesMeta.offset + auditTradesMeta.limit >= auditTradesMeta.total}
+              style={{ background: '#1a1a2e', color: '#fff', border: '1px solid #2a2a3f', borderRadius: 8, padding: '6px 10px', opacity: auditTradesMeta.offset + auditTradesMeta.limit >= auditTradesMeta.total ? 0.5 : 1 }}
+            >
+              Next
+            </button>
+            <button onClick={loadAuditTradesMeta} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '6px 10px', fontWeight: 700 }}>Refresh page checksum</button>
+          </div>
         </div>
       </div>
     </div>
