@@ -39,13 +39,22 @@ def get_stats_overview(
 
     equity = total_realized_pnl + total_unrealized_pnl
 
-    account_balance = None
+    margin_used_positions = 0.0
+    for p in active_positions:
+        notional = abs(float(p.position_amt) * float(p.mark_price))
+        lev = max(int(p.leverage or 1), 1)
+        margin_used_positions += (notional / lev)
+
+    account_balance_wallet = None
+    account_balance_total = None
     try:
         bal = binance_sync_service.fetch_account_balance(asset="USDT")
         if bal is not None:
-            account_balance = float(bal)
+            account_balance_wallet = float(bal)
+            account_balance_total = account_balance_wallet + margin_used_positions
     except Exception:
-        account_balance = None
+        account_balance_wallet = None
+        account_balance_total = None
 
     since = datetime.now(timezone.utc) - _parse_window(window)
     window_trades = (
@@ -73,7 +82,9 @@ def get_stats_overview(
         "total_realized_pnl": total_realized_pnl,
         "total_unrealized_pnl": total_unrealized_pnl,
         "equity": equity,
-        "account_balance": account_balance,
+        "account_balance": account_balance_total,
+        "account_balance_wallet": account_balance_wallet,
+        "margin_used_positions": round(margin_used_positions, 8),
         "max_drawdown_pct": round(max_drawdown_pct, 2),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
