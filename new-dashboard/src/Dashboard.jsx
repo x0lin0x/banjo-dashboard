@@ -89,6 +89,7 @@ function Dashboard() {
 
   const [windowFilter, setWindowFilter] = useState(saved.windowFilter || '30d')
   const [refreshSec, setRefreshSec] = useState(saved.refreshSec || 'off')
+  const [autoSyncSec, setAutoSyncSec] = useState(saved.autoSyncSec || 'off')
   const [alertThresholds, setAlertThresholds] = useState(saved.alertThresholds || DEFAULT_ALERT_THRESHOLDS)
   const [syncToken, setSyncToken] = useState(saved.syncToken || '')
   const [symbolFilter, setSymbolFilter] = useState(saved.symbolFilter || '')
@@ -260,6 +261,17 @@ function Dashboard() {
     return () => clearInterval(id)
   }, [refreshSec, windowFilter, symbolFilter, tradeLimit, tradeOffset, tradeSortBy, tradeSortDir, auditTradesMeta.limit, auditTradesMeta.offset, syncEventsMeta.limit, syncEventsMeta.offset, syncEventsFilterEndpoint, syncEventsFilterStatus])
 
+  useEffect(() => {
+    if (autoSyncSec === 'off') return undefined
+    const ms = Number(autoSyncSec) * 1000
+    const id = setInterval(() => {
+      if (syncing) return
+      if (diag && !diag?.sync?.can_sync) return
+      syncNow()
+    }, ms)
+    return () => clearInterval(id)
+  }, [autoSyncSec, syncing, diag, syncToken])
+
   const ddColor = useMemo(() => ((stats?.max_drawdown_pct || 0) > alertThresholds.ddPct ? '#ff3131' : '#ffae00'), [stats, alertThresholds])
 
   const alerts = useMemo(() => {
@@ -324,10 +336,11 @@ function Dashboard() {
       positionSideFilter,
       positionSortBy,
       positionSortDir,
-      syncToken
+      syncToken,
+      autoSyncSec
     }
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(payload))
-  }, [windowFilter, refreshSec, alertThresholds, symbolFilter, tradeLimit, tradeSortBy, tradeSortDir, positionSideFilter, positionSortBy, positionSortDir, syncToken])
+  }, [windowFilter, refreshSec, alertThresholds, symbolFilter, tradeLimit, tradeSortBy, tradeSortDir, positionSideFilter, positionSortBy, positionSortDir, syncToken, autoSyncSec])
 
   const resetUiSettings = () => {
     localStorage.removeItem(SETTINGS_KEY)
@@ -343,6 +356,7 @@ function Dashboard() {
     setPositionSideFilter('ALL')
     setPositionSortBy('notional_usd')
     setPositionSortDir('desc')
+    setAutoSyncSec('off')
   }
 
   return (
@@ -364,6 +378,10 @@ function Dashboard() {
             <option value='10'>Auto-refresh: 10s</option>
             <option value='30'>Auto-refresh: 30s</option>
             <option value='60'>Auto-refresh: 60s</option>
+          </select>
+          <select value={autoSyncSec} onChange={(e) => setAutoSyncSec(e.target.value)} style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}>
+            <option value='off'>Auto-sync: off</option>
+            <option value='60'>Auto-sync: 60s</option>
           </select>
           {(diag?.sync?.token_required ?? true) && (
             <input
