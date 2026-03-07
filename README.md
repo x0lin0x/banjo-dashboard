@@ -67,7 +67,15 @@ streamlit run app.py
 
 ## Environment
 
-Backend reads `.env` (optional) and supports:
+Backend reads `.env` (optional) and supports.
+
+Bootstrap config:
+```bash
+cd backend
+cp .env.example .env
+```
+
+Supported variables:
 
 - `DATABASE_URL` (defaults to local SQLite in non-docker runs)
 - `BINANCE_API_KEY`
@@ -83,6 +91,10 @@ Security note:
 - Outside `APP_ENV=development`, if `SYNC_API_TOKEN` is set it must be **at least 32 chars**.
 
 If Binance keys are missing, sync service returns mock data for development.
+
+## Operations
+
+See `README_OPS.md` for start/stop, troubleshooting, token rotation, and V1 validation checklist.
 
 ## Schema notes
 
