@@ -75,6 +75,15 @@ Wait `SYNC_MIN_INTERVAL_SECONDS` before retrying same endpoint/actor.
 - [ ] audit CSV export works
 - [ ] sync events CSV export works
 
+For full manual QA, use `QA_CHECKLIST_V1.md`.
+
+Automated smoke (API):
+```bash
+cd /home/guts/.openclaw/workspace/trading-dashboard
+chmod +x scripts/smoke_api_v1.sh
+BASE_URL=http://localhost:8000 SYNC_TOKEN='<token-if-needed>' ./scripts/smoke_api_v1.sh
+```
+
 ---
 
 ## 6) Backup / restore (SQLite default)
