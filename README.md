@@ -73,9 +73,14 @@ Backend reads `.env` (optional) and supports:
 - `BINANCE_API_KEY`
 - `BINANCE_API_SECRET`
 - `BINANCE_BASE_URL` (default `https://fapi.binance.com`)
+- `APP_ENV` (`development|staging|production`, default `development`)
+- `APP_ROLE` (`operator|viewer`, `viewer` cannot call `/sync/*`)
 - `APP_READ_ONLY` (`true|false`, when true all `/sync/*` are disabled)
 - `SYNC_API_TOKEN` (optional; when set, required via `X-API-Token` header for `/sync/*`)
 - `SYNC_MIN_INTERVAL_SECONDS` (default `5`, in-memory rate limit per actor+endpoint)
+
+Security note:
+- Outside `APP_ENV=development`, if `SYNC_API_TOKEN` is set it must be **at least 32 chars**.
 
 If Binance keys are missing, sync service returns mock data for development.
 
