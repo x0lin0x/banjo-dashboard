@@ -15,6 +15,12 @@
 - [ ] Table positions enrichie (liq price, notional, margin mode)
 - [x] Diagnostics connecteurs + erreurs visibles (endpoint backend)
 
+## S1.5 — V1.2 UX/ops (livré)
+- [x] Auto-refresh configurable (off/10s/30s/60s)
+- [x] Filtres fenêtre (24h/7d/30d) sur overview + equity
+- [x] Export CSV trades/positions
+- [x] Panel runtime (last sync + db latency)
+
 ## S2 — Qualité quant / parity
 - [ ] Ajout `signal_id` / `decision_id` dans pipeline
 - [ ] Reconciliation PnL dashboard vs exchange
