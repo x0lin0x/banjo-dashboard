@@ -6,6 +6,8 @@ class Settings(BaseSettings):
     app_host: str = "0.0.0.0"
     app_port: int = 8000
     debug: bool = True
+    app_read_only: bool = False
+    sync_api_token: str = ""
     database_url: str = "sqlite:///./trading.db"
     binance_api_key: str = ""
     binance_api_secret: str = ""

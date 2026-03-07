@@ -237,6 +237,8 @@ def diagnostics_connectors(db: Session = Depends(get_db)):
         "sync": {
             "last_sync_at": last_sync_at,
             "server_time": datetime.now(timezone.utc).isoformat(),
+            "read_only": settings.app_read_only,
+            "token_required": bool(settings.sync_api_token),
         },
     }
 

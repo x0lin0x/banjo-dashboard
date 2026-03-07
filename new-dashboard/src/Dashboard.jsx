@@ -81,10 +81,12 @@ function Dashboard() {
   const [audit, setAudit] = useState(null)
   const [auditTradesMeta, setAuditTradesMeta] = useState({ total: 0, limit: 25, offset: 0, checksum: '' })
   const [syncing, setSyncing] = useState(false)
+  const [syncError, setSyncError] = useState('')
 
   const [windowFilter, setWindowFilter] = useState(saved.windowFilter || '30d')
   const [refreshSec, setRefreshSec] = useState(saved.refreshSec || 'off')
   const [alertThresholds, setAlertThresholds] = useState(saved.alertThresholds || DEFAULT_ALERT_THRESHOLDS)
+  const [syncToken, setSyncToken] = useState(saved.syncToken || '')
   const [symbolFilter, setSymbolFilter] = useState(saved.symbolFilter || '')
   const [tradeLimit, setTradeLimit] = useState(saved.tradeLimit || 25)
   const [tradeOffset, setTradeOffset] = useState(0)
@@ -168,11 +170,21 @@ function Dashboard() {
 
   const syncNow = async () => {
     setSyncing(true)
+    setSyncError('')
     try {
-      await fetch(`${API_URL}/sync/all?symbol=BTCUSDT&limit=100`, { method: 'POST' })
+      const headers = {}
+      if (syncToken.trim()) headers['X-API-Token'] = syncToken.trim()
+
+      const res = await fetch(`${API_URL}/sync/all?symbol=BTCUSDT&limit=100`, { method: 'POST', headers })
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}))
+        throw new Error(payload?.detail || `Sync failed (${res.status})`)
+      }
       loadBase()
       loadTrades()
       loadAuditTradesMeta()
+    } catch (err) {
+      setSyncError(err?.message || 'Sync failed')
     } finally {
       setSyncing(false)
     }
@@ -270,16 +282,18 @@ function Dashboard() {
       tradeSortDir,
       positionSideFilter,
       positionSortBy,
-      positionSortDir
+      positionSortDir,
+      syncToken
     }
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(payload))
-  }, [windowFilter, refreshSec, alertThresholds, symbolFilter, tradeLimit, tradeSortBy, tradeSortDir, positionSideFilter, positionSortBy, positionSortDir])
+  }, [windowFilter, refreshSec, alertThresholds, symbolFilter, tradeLimit, tradeSortBy, tradeSortDir, positionSideFilter, positionSortBy, positionSortDir, syncToken])
 
   const resetUiSettings = () => {
     localStorage.removeItem(SETTINGS_KEY)
     setWindowFilter('30d')
     setRefreshSec('off')
     setAlertThresholds(DEFAULT_ALERT_THRESHOLDS)
+    setSyncToken('')
     setSymbolFilter('')
     setTradeLimit(25)
     setTradeOffset(0)
@@ -297,6 +311,7 @@ function Dashboard() {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <Badge ok={diag?.db?.status === 'ok'} label={`DB: ${diag?.db?.status || 'unknown'}`} />
           <Badge ok={diag?.binance?.status === 'configured'} label={`BINANCE: ${diag?.binance?.status || 'unknown'}`} />
+          <Badge ok={!diag?.sync?.read_only} label={diag?.sync?.read_only ? 'MODE: READ-ONLY' : 'MODE: OPERATOR'} />
           <select value={windowFilter} onChange={(e) => setWindowFilter(e.target.value)} style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}>
             <option value='24h'>24h</option>
             <option value='7d'>7d</option>
@@ -308,7 +323,15 @@ function Dashboard() {
             <option value='30'>Auto-refresh: 30s</option>
             <option value='60'>Auto-refresh: 60s</option>
           </select>
-          <button onClick={syncNow} disabled={syncing} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700, opacity: syncing ? 0.7 : 1 }}>
+          {diag?.sync?.token_required && (
+            <input
+              value={syncToken}
+              onChange={(e) => setSyncToken(e.target.value)}
+              placeholder='Sync token'
+              style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}
+            />
+          )}
+          <button onClick={syncNow} disabled={syncing || !!diag?.sync?.read_only} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700, opacity: syncing || !!diag?.sync?.read_only ? 0.5 : 1 }}>
             {syncing ? 'Syncing...' : 'Sync now'}
           </button>
           <button onClick={resetUiSettings} style={{ background: '#2d2d45', color: '#fff', border: '1px solid #444466', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>
@@ -316,6 +339,12 @@ function Dashboard() {
           </button>
         </div>
       </div>
+
+      {syncError && (
+        <div style={{ ...panelStyle(), border: '1px solid #ff6b6b' }}>
+          <strong style={{ color: '#ff6b6b' }}>Sync error:</strong> {syncError}
+        </div>
+      )}
 
       <div style={panelStyle()}>
         <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Runtime diagnostics</h3>

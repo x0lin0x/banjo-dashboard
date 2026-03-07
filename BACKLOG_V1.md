@@ -31,6 +31,11 @@
 
 - [x] Endpoint audit paginé + checksum page + export CSV backend
 
+## V2.0 — Security / Ops
+- [x] Protection token sur endpoints `/sync/*`
+- [x] Mode read-only (`APP_READ_ONLY`) bloquant sync
+- [x] UI sync token + gestion erreur auth/read-only
+
 ## S3 — Extensions
 - [ ] Multi-stratégies / tags TradingView
 - [ ] Multi-exchange (Hyperliquid)

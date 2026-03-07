@@ -71,6 +71,8 @@ Backend reads `.env` (optional) and supports:
 - `BINANCE_API_KEY`
 - `BINANCE_API_SECRET`
 - `BINANCE_BASE_URL` (default `https://fapi.binance.com`)
+- `APP_READ_ONLY` (`true|false`, when true all `/sync/*` are disabled)
+- `SYNC_API_TOKEN` (optional; when set, required via `X-API-Token` header for `/sync/*`)
 
 If Binance keys are missing, sync service returns mock data for development.
 
