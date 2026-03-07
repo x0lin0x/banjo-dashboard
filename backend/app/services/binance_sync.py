@@ -45,6 +45,21 @@ class BinanceSyncService:
         endpoint = "/fapi/v2/positionRisk"
         return self._signed_get(endpoint)
 
+    def fetch_account_balance(self, asset: str = "USDT") -> Decimal | None:
+        if not self.api_key or not self.api_secret:
+            logger.warning("No Binance credentials found. Returning mock balance.")
+            return Decimal("10000")
+
+        endpoint = "/fapi/v2/balance"
+        rows = self._signed_get(endpoint)
+        wanted = asset.upper().strip()
+        for row in rows:
+            if str(row.get("asset", "")).upper() != wanted:
+                continue
+            # crossWalletBalance is the futures wallet balance for this asset.
+            return Decimal(str(row.get("crossWalletBalance", row.get("balance", "0"))))
+        return None
+
     def sync_trades(self, db: Session, symbol: str = "BTCUSDT", limit: int = 100) -> int:
         trades = self.fetch_recent_trades(symbol=symbol, limit=limit)
         inserted = 0

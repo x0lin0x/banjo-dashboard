@@ -13,11 +13,11 @@ Minimal stack for Binance futures sync + dashboard display.
 
 Base URL: `http://localhost:8000/api/v1`
 
-- `GET /stats/overview?window=24h|7d|30d`
+- `GET /stats/overview?window=24h|7d|30d` (includes active positions count + account_balance when available)
 - `GET /stats/equity?window=24h|7d|30d`
 - `GET /risk/exposure`
 - `GET /trades?limit=100&offset=0&window=24h|7d|30d&sort_by=executed_at|symbol|realized_pnl&sort_dir=asc|desc&symbol=BTCUSDT`
-- `GET /positions`
+- `GET /positions?include_zero=false` (default hides zero-notional rows)
 - `GET /diagnostics/connectors` (db status/latency, binance mode, last sync, security mode)
 - `GET /sync/events?limit=20&offset=0&endpoint=sync/all&status=ok|error` (latest sync action logs, filterable)
 - `GET /sync/events.csv?endpoint=sync/all&status=ok|error` (sync events CSV export)

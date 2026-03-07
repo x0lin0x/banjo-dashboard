@@ -408,7 +408,7 @@ function Dashboard() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
-        <Card label='EQUITY (proxy)' value={`$${(stats?.equity ?? 0).toFixed?.(2) ?? '0.00'}`} color='#8ab4ff' />
+        <Card label='BALANCE' value={stats?.account_balance == null ? 'n/a' : `$${Number(stats.account_balance).toFixed(2)}`} color='#8ab4ff' />
         <Card label='MAX DD (window)' value={`${stats?.max_drawdown_pct ?? 0}%`} color={ddColor} />
         <Card label='GROSS LONG' value={`$${(risk?.gross_long_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#39ff14' />
         <Card label='GROSS SHORT' value={`$${(risk?.gross_short_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#ff3131' />

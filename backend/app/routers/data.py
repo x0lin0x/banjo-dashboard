@@ -14,6 +14,7 @@ from app.database import get_db
 from app.models.position import Position
 from app.models.sync_event import SyncEvent
 from app.models.trade import Trade
+from app.services.binance_sync import binance_sync_service
 
 router = APIRouter(prefix="/api/v1", tags=["data"])
 
@@ -29,11 +30,22 @@ def get_stats_overview(
     db: Session = Depends(get_db),
 ):
     total_trades = db.query(func.count(Trade.id)).scalar()
-    total_positions = db.query(func.count(Position.id)).scalar()
     total_realized_pnl = float(db.query(func.sum(Trade.realized_pnl)).scalar() or 0)
-    total_unrealized_pnl = float(db.query(func.sum(Position.unrealized_pnl)).scalar() or 0)
+
+    all_positions = db.query(Position).all()
+    active_positions = [p for p in all_positions if abs(float(p.position_amt) * float(p.mark_price)) > 0]
+    total_positions = len(active_positions)
+    total_unrealized_pnl = float(sum(float(p.unrealized_pnl or 0) for p in active_positions))
 
     equity = total_realized_pnl + total_unrealized_pnl
+
+    account_balance = None
+    try:
+        bal = binance_sync_service.fetch_account_balance(asset="USDT")
+        if bal is not None:
+            account_balance = float(bal)
+    except Exception:
+        account_balance = None
 
     since = datetime.now(timezone.utc) - _parse_window(window)
     window_trades = (
@@ -61,6 +73,7 @@ def get_stats_overview(
         "total_realized_pnl": total_realized_pnl,
         "total_unrealized_pnl": total_unrealized_pnl,
         "equity": equity,
+        "account_balance": account_balance,
         "max_drawdown_pct": round(max_drawdown_pct, 2),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -185,10 +198,19 @@ def get_trades(
 
 
 @router.get("/positions")
-def get_positions(db: Session = Depends(get_db)):
+def get_positions(
+    include_zero: bool = Query(default=False, description="Include zero-notional positions"),
+    db: Session = Depends(get_db),
+):
     positions = db.query(Position).order_by(Position.symbol.asc()).all()
-    return {
-        "positions": [
+
+    rows = []
+    for p in positions:
+        notional_usd = round(abs(float(p.position_amt) * float(p.mark_price)), 4)
+        if (not include_zero) and notional_usd == 0:
+            continue
+
+        rows.append(
             {
                 "id": p.id,
                 "symbol": p.symbol,
@@ -196,14 +218,14 @@ def get_positions(db: Session = Depends(get_db)):
                 "position_amt": float(p.position_amt),
                 "entry_price": float(p.entry_price),
                 "mark_price": float(p.mark_price),
-                "notional_usd": round(abs(float(p.position_amt) * float(p.mark_price)), 4),
+                "notional_usd": notional_usd,
                 "unrealized_pnl": float(p.unrealized_pnl),
                 "leverage": p.leverage,
                 "updated_at": p.updated_at.isoformat() if p.updated_at else None,
             }
-            for p in positions
-        ]
-    }
+        )
+
+    return {"positions": rows}
 
 
 def _sync_events_query(db: Session, endpoint: str | None, status_value: str | None):
