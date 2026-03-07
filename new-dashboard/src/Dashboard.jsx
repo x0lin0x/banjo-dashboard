@@ -355,7 +355,7 @@ function Dashboard() {
             <option value='30'>Auto-refresh: 30s</option>
             <option value='60'>Auto-refresh: 60s</option>
           </select>
-          {diag?.sync?.token_required && (
+          {(diag?.sync?.token_required ?? true) && (
             <input
               value={syncToken}
               onChange={(e) => setSyncToken(e.target.value)}
