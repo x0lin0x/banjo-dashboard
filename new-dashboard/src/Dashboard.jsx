@@ -3,7 +3,7 @@ import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'rec
 
 const API_URL = 'http://localhost:8000/api/v1'
 
-const ALERT_THRESHOLDS = {
+const DEFAULT_ALERT_THRESHOLDS = {
   ddPct: 20,
   concentrationPct: 35,
   leverageWeighted: 8
@@ -70,6 +70,7 @@ function Dashboard() {
 
   const [windowFilter, setWindowFilter] = useState('30d')
   const [refreshSec, setRefreshSec] = useState('off')
+  const [alertThresholds, setAlertThresholds] = useState(DEFAULT_ALERT_THRESHOLDS)
   const [symbolFilter, setSymbolFilter] = useState('')
   const [tradeLimit, setTradeLimit] = useState(25)
   const [tradeOffset, setTradeOffset] = useState(0)
@@ -157,22 +158,37 @@ function Dashboard() {
     return () => clearInterval(id)
   }, [refreshSec, windowFilter, symbolFilter, tradeLimit, tradeOffset, tradeSortBy, tradeSortDir])
 
-  const ddColor = useMemo(() => ((stats?.max_drawdown_pct || 0) > ALERT_THRESHOLDS.ddPct ? '#ff3131' : '#ffae00'), [stats])
+  const ddColor = useMemo(() => ((stats?.max_drawdown_pct || 0) > alertThresholds.ddPct ? '#ff3131' : '#ffae00'), [stats, alertThresholds])
 
   const alerts = useMemo(() => {
     const out = []
-    if ((stats?.max_drawdown_pct || 0) > ALERT_THRESHOLDS.ddPct) {
-      out.push({ level: 'HIGH', msg: `Drawdown élevé: ${stats.max_drawdown_pct}% (> ${ALERT_THRESHOLDS.ddPct}%)` })
+    if ((stats?.max_drawdown_pct || 0) > alertThresholds.ddPct) {
+      out.push({ level: 'HIGH', msg: `Drawdown élevé: ${stats.max_drawdown_pct}% (> ${alertThresholds.ddPct}%)` })
     }
-    if ((risk?.top_symbol_share_pct || 0) > ALERT_THRESHOLDS.concentrationPct) {
-      out.push({ level: 'MED', msg: `Concentration symbole élevée: ${risk.top_symbol_share_pct}% (> ${ALERT_THRESHOLDS.concentrationPct}%)` })
+    if ((risk?.top_symbol_share_pct || 0) > alertThresholds.concentrationPct) {
+      out.push({ level: 'MED', msg: `Concentration symbole élevée: ${risk.top_symbol_share_pct}% (> ${alertThresholds.concentrationPct}%)` })
     }
-    if ((risk?.leverage_weighted || 0) > ALERT_THRESHOLDS.leverageWeighted) {
-      out.push({ level: 'HIGH', msg: `Levier pondéré élevé: ${risk.leverage_weighted}x (> ${ALERT_THRESHOLDS.leverageWeighted}x)` })
+    if ((risk?.leverage_weighted || 0) > alertThresholds.leverageWeighted) {
+      out.push({ level: 'HIGH', msg: `Levier pondéré élevé: ${risk.leverage_weighted}x (> ${alertThresholds.leverageWeighted}x)` })
     }
     if (!out.length) out.push({ level: 'OK', msg: 'Aucune alerte critique active' })
     return out
-  }, [risk, stats])
+  }, [risk, stats, alertThresholds])
+
+  const positionSummary = useMemo(() => {
+    let longNotional = 0
+    let shortNotional = 0
+    let top = { symbol: 'n/a', notional: 0 }
+
+    for (const p of positions) {
+      const n = Number(p.notional_usd || 0)
+      if (p.side === 'LONG') longNotional += n
+      else shortNotional += n
+      if (n > top.notional) top = { symbol: p.symbol, notional: n }
+    }
+
+    return { longNotional, shortNotional, top }
+  }, [positions])
 
   return (
     <div style={{ minHeight: '100vh', background: '#0a0a0f', color: 'white', padding: 24 }}>
@@ -222,7 +238,15 @@ function Dashboard() {
       </div>
 
       <div style={panelStyle()}>
-        <h3 style={{ marginTop: 0, color: '#ffd166' }}>Alerts</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <h3 style={{ marginTop: 0, color: '#ffd166', marginBottom: 0 }}>Alerts</h3>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input type='number' value={alertThresholds.ddPct} onChange={(e) => setAlertThresholds((p) => ({ ...p, ddPct: Number(e.target.value || 0) }))} style={{ width: 80, background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '6px 8px' }} />
+            <input type='number' value={alertThresholds.concentrationPct} onChange={(e) => setAlertThresholds((p) => ({ ...p, concentrationPct: Number(e.target.value || 0) }))} style={{ width: 80, background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '6px 8px' }} />
+            <input type='number' value={alertThresholds.leverageWeighted} onChange={(e) => setAlertThresholds((p) => ({ ...p, leverageWeighted: Number(e.target.value || 0) }))} style={{ width: 80, background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '6px 8px' }} />
+          </div>
+        </div>
+        <p style={{ color: '#8b8ba7', fontSize: 12, marginTop: 6 }}>Thresholds: DD% / Concentration% / Levier pondéré x</p>
         <ul style={{ margin: 0, paddingLeft: 18 }}>
           {alerts.map((a, idx) => (
             <li key={idx} style={{ color: a.level === 'OK' ? '#39ff14' : '#ff6b6b', marginBottom: 6 }}>
@@ -230,6 +254,12 @@ function Dashboard() {
             </li>
           ))}
         </ul>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18, marginTop: 18 }}>
+        <Card label='LONG NOTIONAL' value={`$${positionSummary.longNotional.toFixed(2)}`} color='#39ff14' />
+        <Card label='SHORT NOTIONAL' value={`$${positionSummary.shortNotional.toFixed(2)}`} color='#ff3131' />
+        <Card label='TOP EXPOSURE' value={`${positionSummary.top.symbol} ($${positionSummary.top.notional.toFixed(2)})`} color='#ffd166' />
       </div>
 
       <div style={panelStyle()}>

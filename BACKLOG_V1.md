@@ -11,8 +11,8 @@
 - [x] Endpoint equity timeseries `/stats/equity`
 - [x] Endpoint risk `/risk/exposure`
 - [x] Cards DD / Gross exposure / concentration
-- [ ] Table trades avec filtres (symbol, side, time)
-- [ ] Table positions enrichie (liq price, notional, margin mode)
+- [x] Table trades avec filtres (symbol, time/window) + tri + pagination
+- [~] Table positions enrichie (notional livré, liq price/margin mode en attente)
 - [x] Diagnostics connecteurs + erreurs visibles (endpoint backend)
 
 ## S1.5 — V1.2 UX/ops (livré)
