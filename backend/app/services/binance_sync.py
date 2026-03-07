@@ -15,6 +15,9 @@ class BinanceSyncService:
         self.api_key = api_key
         self.api_secret = api_secret
         self.base_url = base_url.rstrip("/")
+        # Reduce Binance pressure from frequent dashboard refreshes.
+        self._balance_cache: dict[str, tuple[float, Decimal | None]] = {}
+        self._balance_cache_ttl_seconds: int = 30
 
     def _signed_get(self, endpoint: str, params: dict | None = None) -> list[dict]:
         if not self.api_key or not self.api_secret:
@@ -46,19 +49,32 @@ class BinanceSyncService:
         return self._signed_get(endpoint)
 
     def fetch_account_balance(self, asset: str = "USDT") -> Decimal | None:
+        wanted = asset.upper().strip()
+
+        # short in-memory cache to avoid hammering Binance on every dashboard refresh
+        now = time.time()
+        cached = self._balance_cache.get(wanted)
+        if cached and (now - cached[0]) < self._balance_cache_ttl_seconds:
+            return cached[1]
+
         if not self.api_key or not self.api_secret:
             logger.warning("No Binance credentials found. Returning mock balance.")
-            return Decimal("10000")
+            value = Decimal("10000")
+            self._balance_cache[wanted] = (now, value)
+            return value
 
         endpoint = "/fapi/v2/balance"
         rows = self._signed_get(endpoint)
-        wanted = asset.upper().strip()
+        value = None
         for row in rows:
             if str(row.get("asset", "")).upper() != wanted:
                 continue
             # crossWalletBalance is the futures wallet balance for this asset.
-            return Decimal(str(row.get("crossWalletBalance", row.get("balance", "0"))))
-        return None
+            value = Decimal(str(row.get("crossWalletBalance", row.get("balance", "0"))))
+            break
+
+        self._balance_cache[wanted] = (now, value)
+        return value
 
     def sync_trades(self, db: Session, symbol: str = "BTCUSDT", limit: int = 100) -> int:
         trades = self.fetch_recent_trades(symbol=symbol, limit=limit)
