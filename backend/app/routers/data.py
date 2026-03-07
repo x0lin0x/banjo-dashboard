@@ -1,8 +1,11 @@
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+import csv
 import hashlib
+import io
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
@@ -238,18 +241,21 @@ def diagnostics_connectors(db: Session = Depends(get_db)):
     }
 
 
+def _audit_query(window: str, db: Session):
+    since = datetime.now(timezone.utc) - _parse_window(window)
+    return (
+        db.query(Trade)
+        .filter(Trade.executed_at >= since)
+        .order_by(Trade.executed_at.asc())
+    )
+
+
 @router.get("/audit/summary")
 def audit_summary(
     window: str = Query(default="30d", pattern="^(24h|7d|30d)$"),
     db: Session = Depends(get_db),
 ):
-    since = datetime.now(timezone.utc) - _parse_window(window)
-    trades = (
-        db.query(Trade)
-        .filter(Trade.executed_at >= since)
-        .order_by(Trade.executed_at.asc())
-        .all()
-    )
+    trades = _audit_query(window, db).all()
 
     payload = "\n".join(
         [
@@ -270,3 +276,94 @@ def audit_summary(
         "checksum_sha256": checksum,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@router.get("/audit/trades")
+def audit_trades(
+    window: str = Query(default="30d", pattern="^(24h|7d|30d)$"),
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    q = _audit_query(window, db)
+    total = q.count()
+    rows = q.offset(offset).limit(limit).all()
+
+    payload = "\n".join(
+        [
+            f"{t.binance_trade_id}|{t.symbol}|{t.side}|{float(t.qty)}|{float(t.price)}|{float(t.realized_pnl or 0)}|{t.executed_at.isoformat()}"
+            for t in rows
+        ]
+    )
+    checksum = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    return {
+        "window": window,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "page_checksum_sha256": checksum,
+        "trades": [
+            {
+                "id": t.id,
+                "binance_trade_id": t.binance_trade_id,
+                "symbol": t.symbol,
+                "side": t.side,
+                "price": float(t.price),
+                "qty": float(t.qty),
+                "commission": float(t.commission or 0),
+                "realized_pnl": float(t.realized_pnl or 0),
+                "signal_id": t.signal_id,
+                "decision_id": t.decision_id,
+                "executed_at": t.executed_at.isoformat(),
+            }
+            for t in rows
+        ],
+    }
+
+
+@router.get("/audit/trades.csv")
+def audit_trades_csv(
+    window: str = Query(default="30d", pattern="^(24h|7d|30d)$"),
+    db: Session = Depends(get_db),
+):
+    rows = _audit_query(window, db).all()
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow([
+        "id",
+        "binance_trade_id",
+        "symbol",
+        "side",
+        "price",
+        "qty",
+        "commission",
+        "realized_pnl",
+        "signal_id",
+        "decision_id",
+        "executed_at",
+    ])
+
+    for t in rows:
+        writer.writerow([
+            t.id,
+            t.binance_trade_id,
+            t.symbol,
+            t.side,
+            float(t.price),
+            float(t.qty),
+            float(t.commission or 0),
+            float(t.realized_pnl or 0),
+            t.signal_id or "",
+            t.decision_id or "",
+            t.executed_at.isoformat(),
+        ])
+
+    csv_data = buffer.getvalue()
+    filename = f"audit_trades_{window}.csv"
+    return StreamingResponse(
+        iter([csv_data]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )

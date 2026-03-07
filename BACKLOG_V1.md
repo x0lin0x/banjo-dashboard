@@ -29,6 +29,8 @@
 - [ ] Alertes seuils (DD, levier, erreurs sync)
 - [x] Export CSV auditable (trades/equity) + endpoint `/audit/summary`
 
+- [x] Endpoint audit paginé + checksum page + export CSV backend
+
 ## S3 — Extensions
 - [ ] Multi-stratégies / tags TradingView
 - [ ] Multi-exchange (Hyperliquid)

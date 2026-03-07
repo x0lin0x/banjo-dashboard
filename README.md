@@ -20,6 +20,8 @@ Base URL: `http://localhost:8000/api/v1`
 - `GET /positions`
 - `GET /diagnostics/connectors` (db status/latency, binance mode, last sync)
 - `GET /audit/summary?window=24h|7d|30d` (counts, realized, fees, checksum)
+- `GET /audit/trades?window=24h|7d|30d&limit=100&offset=0` (paged audit rows + page checksum)
+- `GET /audit/trades.csv?window=24h|7d|30d` (backend CSV export)
 - `POST /sync/trades?symbol=BTCUSDT&limit=100`
 - `POST /sync/positions`
 - `POST /sync/all?symbol=BTCUSDT&limit=100`

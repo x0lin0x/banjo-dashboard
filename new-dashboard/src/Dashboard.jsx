@@ -79,6 +79,7 @@ function Dashboard() {
   const [positions, setPositions] = useState([])
   const [diag, setDiag] = useState(null)
   const [audit, setAudit] = useState(null)
+  const [auditTradesMeta, setAuditTradesMeta] = useState({ total: 0, limit: 25, offset: 0, checksum: '' })
   const [syncing, setSyncing] = useState(false)
 
   const [windowFilter, setWindowFilter] = useState(saved.windowFilter || '30d')
@@ -122,6 +123,27 @@ function Dashboard() {
       })
   }
 
+  const loadAuditTradesMeta = () => {
+    const params = new URLSearchParams({
+      window: windowFilter,
+      limit: String(auditTradesMeta.limit),
+      offset: String(auditTradesMeta.offset)
+    })
+
+    fetch(`${API_URL}/audit/trades?${params.toString()}`)
+      .then((r) => r.json())
+      .then((res) => {
+        setAuditTradesMeta((p) => ({
+          ...p,
+          total: res?.total || 0,
+          checksum: res?.page_checksum_sha256 || ''
+        }))
+      })
+      .catch(() => {
+        setAuditTradesMeta((p) => ({ ...p, total: 0, checksum: '' }))
+      })
+  }
+
   const loadTrades = () => {
     const params = new URLSearchParams({
       limit: String(tradeLimit),
@@ -150,6 +172,7 @@ function Dashboard() {
       await fetch(`${API_URL}/sync/all?symbol=BTCUSDT&limit=100`, { method: 'POST' })
       loadBase()
       loadTrades()
+      loadAuditTradesMeta()
     } finally {
       setSyncing(false)
     }
@@ -158,6 +181,7 @@ function Dashboard() {
   useEffect(() => {
     loadBase()
     loadTrades()
+    loadAuditTradesMeta()
   }, [windowFilter])
 
   useEffect(() => {
@@ -169,14 +193,19 @@ function Dashboard() {
   }, [symbolFilter, tradeLimit, tradeOffset, windowFilter, tradeSortBy, tradeSortDir])
 
   useEffect(() => {
+    loadAuditTradesMeta()
+  }, [windowFilter, auditTradesMeta.limit, auditTradesMeta.offset])
+
+  useEffect(() => {
     if (refreshSec === 'off') return undefined
     const ms = Number(refreshSec) * 1000
     const id = setInterval(() => {
       loadBase()
       loadTrades()
+      loadAuditTradesMeta()
     }, ms)
     return () => clearInterval(id)
-  }, [refreshSec, windowFilter, symbolFilter, tradeLimit, tradeOffset, tradeSortBy, tradeSortDir])
+  }, [refreshSec, windowFilter, symbolFilter, tradeLimit, tradeOffset, tradeSortBy, tradeSortDir, auditTradesMeta.limit, auditTradesMeta.offset])
 
   const ddColor = useMemo(() => ((stats?.max_drawdown_pct || 0) > alertThresholds.ddPct ? '#ff3131' : '#ffae00'), [stats, alertThresholds])
 
@@ -298,12 +327,45 @@ function Dashboard() {
       </div>
 
       <div style={panelStyle()}>
-        <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Audit summary ({windowFilter})</h3>
-        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', color: '#cfd3ff' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <h3 style={{ marginTop: 0, color: '#c8c8ff', marginBottom: 0 }}>Audit summary ({windowFilter})</h3>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <select value={auditTradesMeta.limit} onChange={(e) => setAuditTradesMeta((p) => ({ ...p, limit: Number(e.target.value), offset: 0 }))} style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}>
+              <option value={25}>Page 25</option>
+              <option value={50}>Page 50</option>
+              <option value={100}>Page 100</option>
+            </select>
+            <button onClick={() => window.open(`${API_URL}/audit/trades.csv?window=${windowFilter}`, '_blank')} style={{ background: '#8ab4ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>Export audit CSV (backend)</button>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', color: '#cfd3ff', marginTop: 10 }}>
           <span>Trades: <strong>{audit?.trades_count ?? 0}</strong></span>
           <span>Realized PnL: <strong>{audit?.total_realized_pnl ?? 0}</strong></span>
           <span>Fees: <strong>{audit?.total_fees ?? 0}</strong></span>
-          <span>Checksum: <strong style={{ fontFamily: 'monospace' }}>{(audit?.checksum_sha256 || 'n/a').slice(0, 16)}...</strong></span>
+          <span>Global checksum: <strong style={{ fontFamily: 'monospace' }}>{(audit?.checksum_sha256 || 'n/a').slice(0, 16)}...</strong></span>
+          <span>Page checksum: <strong style={{ fontFamily: 'monospace' }}>{(auditTradesMeta?.checksum || 'n/a').slice(0, 16)}...</strong></span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, color: '#b7bbd8' }}>
+          <span>
+            Page {auditTradesMeta.total === 0 ? 0 : Math.floor(auditTradesMeta.offset / auditTradesMeta.limit) + 1} / {Math.max(1, Math.ceil((auditTradesMeta.total || 0) / auditTradesMeta.limit))}
+          </span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setAuditTradesMeta((p) => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}
+              disabled={auditTradesMeta.offset === 0}
+              style={{ background: '#1a1a2e', color: '#fff', border: '1px solid #2a2a3f', borderRadius: 8, padding: '6px 10px', opacity: auditTradesMeta.offset === 0 ? 0.5 : 1 }}
+            >
+              Prev
+            </button>
+            <button
+              onClick={() => setAuditTradesMeta((p) => ({ ...p, offset: p.offset + p.limit }))}
+              disabled={auditTradesMeta.offset + auditTradesMeta.limit >= auditTradesMeta.total}
+              style={{ background: '#1a1a2e', color: '#fff', border: '1px solid #2a2a3f', borderRadius: 8, padding: '6px 10px', opacity: auditTradesMeta.offset + auditTradesMeta.limit >= auditTradesMeta.total ? 0.5 : 1 }}
+            >
+              Next
+            </button>
+            <button onClick={loadAuditTradesMeta} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '6px 10px', fontWeight: 700 }}>Refresh page checksum</button>
+          </div>
         </div>
       </div>
 
