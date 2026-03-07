@@ -22,6 +22,7 @@
 - [x] Panel runtime (last sync + db latency)
 
 ## S2 — Qualité quant / parity
+- [x] Persistance locale des réglages UI (filtres/seuils/tri)
 - [ ] Ajout `signal_id` / `decision_id` dans pipeline
 - [ ] Reconciliation PnL dashboard vs exchange
 - [ ] Funding fees agrégés et affichés

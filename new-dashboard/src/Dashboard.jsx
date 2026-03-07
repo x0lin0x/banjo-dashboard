@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 const API_URL = 'http://localhost:8000/api/v1'
+const SETTINGS_KEY = 'banjo-dashboard-settings-v1'
 
 const DEFAULT_ALERT_THRESHOLDS = {
   ddPct: 20,
@@ -41,6 +42,15 @@ function Badge({ ok, label }) {
   )
 }
 
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
 function exportCsv(filename, rows) {
   if (!rows?.length) return
   const headers = Object.keys(rows[0])
@@ -60,6 +70,8 @@ function exportCsv(filename, rows) {
 }
 
 function Dashboard() {
+  const saved = loadSettings()
+
   const [stats, setStats] = useState(null)
   const [risk, setRisk] = useState(null)
   const [equity, setEquity] = useState([])
@@ -68,19 +80,19 @@ function Dashboard() {
   const [diag, setDiag] = useState(null)
   const [syncing, setSyncing] = useState(false)
 
-  const [windowFilter, setWindowFilter] = useState('30d')
-  const [refreshSec, setRefreshSec] = useState('off')
-  const [alertThresholds, setAlertThresholds] = useState(DEFAULT_ALERT_THRESHOLDS)
-  const [symbolFilter, setSymbolFilter] = useState('')
-  const [tradeLimit, setTradeLimit] = useState(25)
+  const [windowFilter, setWindowFilter] = useState(saved.windowFilter || '30d')
+  const [refreshSec, setRefreshSec] = useState(saved.refreshSec || 'off')
+  const [alertThresholds, setAlertThresholds] = useState(saved.alertThresholds || DEFAULT_ALERT_THRESHOLDS)
+  const [symbolFilter, setSymbolFilter] = useState(saved.symbolFilter || '')
+  const [tradeLimit, setTradeLimit] = useState(saved.tradeLimit || 25)
   const [tradeOffset, setTradeOffset] = useState(0)
   const [tradeTotal, setTradeTotal] = useState(0)
-  const [tradeSortBy, setTradeSortBy] = useState('executed_at')
-  const [tradeSortDir, setTradeSortDir] = useState('desc')
+  const [tradeSortBy, setTradeSortBy] = useState(saved.tradeSortBy || 'executed_at')
+  const [tradeSortDir, setTradeSortDir] = useState(saved.tradeSortDir || 'desc')
 
-  const [positionSideFilter, setPositionSideFilter] = useState('ALL')
-  const [positionSortBy, setPositionSortBy] = useState('notional_usd')
-  const [positionSortDir, setPositionSortDir] = useState('desc')
+  const [positionSideFilter, setPositionSideFilter] = useState(saved.positionSideFilter || 'ALL')
+  const [positionSortBy, setPositionSortBy] = useState(saved.positionSortBy || 'notional_usd')
+  const [positionSortDir, setPositionSortDir] = useState(saved.positionSortDir || 'desc')
 
   const loadBase = () => {
     Promise.all([
@@ -214,6 +226,37 @@ function Dashboard() {
     return filtered
   }, [positions, positionSideFilter, positionSortBy, positionSortDir])
 
+  useEffect(() => {
+    const payload = {
+      windowFilter,
+      refreshSec,
+      alertThresholds,
+      symbolFilter,
+      tradeLimit,
+      tradeSortBy,
+      tradeSortDir,
+      positionSideFilter,
+      positionSortBy,
+      positionSortDir
+    }
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(payload))
+  }, [windowFilter, refreshSec, alertThresholds, symbolFilter, tradeLimit, tradeSortBy, tradeSortDir, positionSideFilter, positionSortBy, positionSortDir])
+
+  const resetUiSettings = () => {
+    localStorage.removeItem(SETTINGS_KEY)
+    setWindowFilter('30d')
+    setRefreshSec('off')
+    setAlertThresholds(DEFAULT_ALERT_THRESHOLDS)
+    setSymbolFilter('')
+    setTradeLimit(25)
+    setTradeOffset(0)
+    setTradeSortBy('executed_at')
+    setTradeSortDir('desc')
+    setPositionSideFilter('ALL')
+    setPositionSortBy('notional_usd')
+    setPositionSortDir('desc')
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: '#0a0a0f', color: 'white', padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -234,6 +277,9 @@ function Dashboard() {
           </select>
           <button onClick={syncNow} disabled={syncing} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700, opacity: syncing ? 0.7 : 1 }}>
             {syncing ? 'Syncing...' : 'Sync now'}
+          </button>
+          <button onClick={resetUiSettings} style={{ background: '#2d2d45', color: '#fff', border: '1px solid #444466', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>
+            Reset UI
           </button>
         </div>
       </div>
