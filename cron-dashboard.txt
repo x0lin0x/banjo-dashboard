@@ -1,0 +1,1 @@
+*/30 * * * * /home/guts/clawd/trading-dashboard/auto-dev.sh

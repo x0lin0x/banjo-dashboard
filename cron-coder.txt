@@ -1,0 +1,1 @@
+0 * * * * /home/guts/clawd/trading-dashboard/new-dashboard/auto-coder.sh
