@@ -29,9 +29,6 @@ def get_stats_overview(
     window: str = Query(default="30d", pattern="^(24h|7d|30d)$"),
     db: Session = Depends(get_db),
 ):
-    total_trades = db.query(func.count(Trade.id)).scalar()
-    total_realized_pnl = float(db.query(func.sum(Trade.realized_pnl)).scalar() or 0)
-
     all_positions = db.query(Position).all()
     active_positions = [p for p in all_positions if abs(float(p.position_amt) * float(p.mark_price)) > 0]
     total_positions = len(active_positions)
@@ -76,8 +73,14 @@ def get_stats_overview(
             if dd > max_drawdown_pct:
                 max_drawdown_pct = dd
 
+    # Window-aware metrics/counters
+    total_realized_pnl = float(sum(float(t.realized_pnl or 0) for t in window_trades))
+    total_trades = len(window_trades)
+    total_closed_trades = sum(1 for t in window_trades if abs(float(t.realized_pnl or 0)) > 0)
+
     return {
         "total_trades": total_trades,
+        "total_closed_trades": total_closed_trades,
         "total_positions": total_positions,
         "total_realized_pnl": total_realized_pnl,
         "total_unrealized_pnl": total_unrealized_pnl,
@@ -103,16 +106,22 @@ def get_equity_timeseries(
         .all()
     )
 
-    by_day: dict[str, float] = defaultdict(float)
+    # 24h -> hourly points for better visibility.
+    # 7d/30d -> daily points.
+    by_bucket: dict[str, float] = defaultdict(float)
     for t in trades:
-        key = t.executed_at.astimezone(timezone.utc).date().isoformat()
-        by_day[key] += float(t.realized_pnl or 0)
+        dt = t.executed_at.astimezone(timezone.utc)
+        if window == "24h":
+            key = dt.replace(minute=0, second=0, microsecond=0).isoformat()
+        else:
+            key = dt.date().isoformat()
+        by_bucket[key] += float(t.realized_pnl or 0)
 
     cumulative = 0.0
     series = []
-    for day in sorted(by_day.keys()):
-        cumulative += by_day[day]
-        series.append({"ts": day, "equity": round(cumulative, 4), "pnl_realized": round(by_day[day], 4)})
+    for key in sorted(by_bucket.keys()):
+        cumulative += by_bucket[key]
+        series.append({"ts": key, "equity": round(cumulative, 4), "pnl_realized": round(by_bucket[key], 4)})
 
     return {"window": window, "points": series}
 

@@ -3,11 +3,12 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.binance_sync import binance_sync_service
 from app.models.position import Position
+from app.security import require_sync_access
 
 router = APIRouter(prefix="/api/v1", tags=["scan"])
 
 @router.post("/sync/scan-all-symbols")
-def scan_all_symbols(limit: int = 1000, db: Session = Depends(get_db)):
+def scan_all_symbols(limit: int = 1000, _: None = Depends(require_sync_access), db: Session = Depends(get_db)):
     """Scan all symbols with positions and sync trades."""
     # Get all unique symbols from positions
     positions = db.query(Position.symbol).distinct().all()

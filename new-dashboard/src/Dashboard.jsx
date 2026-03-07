@@ -199,7 +199,7 @@ function Dashboard() {
       const headers = {}
       if (syncToken.trim()) headers['X-API-Token'] = syncToken.trim()
 
-      const res = await fetch(`${API_URL}/sync/all?symbol=BTCUSDT&limit=100`, { method: 'POST', headers })
+      const res = await fetch(`${API_URL}/sync/scan-all-symbols?limit=200`, { method: 'POST', headers })
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}))
         throw new Error(payload?.detail || `Sync failed (${res.status})`)
@@ -402,7 +402,7 @@ function Dashboard() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 24 }}>
         <Card label='POSITIONS' value={stats?.total_positions ?? 0} color='#b026ff' />
-        <Card label='TRADES' value={stats?.total_trades ?? 0} color='#00f3ff' />
+        <Card label='CLOSED TRADES' value={stats?.total_closed_trades ?? stats?.total_trades ?? 0} color='#00f3ff' />
         <Card label='REALIZED P&L' value={`$${(stats?.total_realized_pnl ?? 0).toFixed?.(2) ?? '0.00'}`} color={(stats?.total_realized_pnl ?? 0) >= 0 ? '#39ff14' : '#ff3131'} />
         <Card label='UNREALIZED P&L' value={`$${(stats?.total_unrealized_pnl ?? 0).toFixed?.(2) ?? '0.00'}`} color={(stats?.total_unrealized_pnl ?? 0) >= 0 ? '#39ff14' : '#ff3131'} />
       </div>
