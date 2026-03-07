@@ -33,7 +33,7 @@ class BinanceSyncService:
         if not self.api_key or not self.api_secret:
             logger.warning("No Binance credentials found. Returning mock trades.")
             now_ms = int(time.time() * 1000)
-            return [{"id": f"mock-{now_ms}", "symbol": symbol, "orderId": "mock-order", "side": "BUY", "price": "50000", "qty": "0.001", "quoteQty": "50", "commission": "0.01", "commissionAsset": "USDT", "realizedPnl": "0", "time": now_ms}]
+            return [{"id": f"mock-{now_ms}", "symbol": symbol, "orderId": "mock-order", "side": "BUY", "price": "50000", "qty": "0.001", "quoteQty": "50", "commission": "0.01", "commissionAsset": "USDT", "realizedPnl": "0", "time": now_ms, "signalId": f"sig-{symbol}-{now_ms}", "decisionId": f"dec-{symbol}-{now_ms}"}]
         endpoint = "/fapi/v1/userTrades"
         params = {"symbol": symbol, "limit": min(max(limit, 1), 1000)}
         return self._signed_get(endpoint, params=params)
@@ -63,6 +63,8 @@ class BinanceSyncService:
                 commission=Decimal(str(raw.get("commission", "0"))),
                 commission_asset=raw.get("commissionAsset", "USDT"),
                 realized_pnl=Decimal(str(raw.get("realizedPnl", "0"))),
+                signal_id=str(raw.get("signalId", "")) or None,
+                decision_id=str(raw.get("decisionId", "")) or None,
                 executed_at=datetime.fromtimestamp(int(raw.get("time", int(time.time() * 1000))) / 1000, tz=timezone.utc),
             )
             db.add(trade)

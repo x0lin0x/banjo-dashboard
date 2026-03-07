@@ -70,3 +70,7 @@ Backend reads `.env` (optional) and supports:
 - `BINANCE_BASE_URL` (default `https://fapi.binance.com`)
 
 If Binance keys are missing, sync service returns mock data for development.
+
+## Schema notes
+
+On startup, backend applies a lightweight runtime migration for `trades.signal_id` and `trades.decision_id` (for local SQLite / existing dev DB compatibility).
