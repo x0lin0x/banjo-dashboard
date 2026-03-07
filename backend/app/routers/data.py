@@ -183,11 +183,20 @@ def get_positions(db: Session = Depends(get_db)):
 def diagnostics_connectors(db: Session = Depends(get_db)):
     db_status = "ok"
     db_error = None
+    db_latency_ms = None
+    started = datetime.now(timezone.utc)
     try:
         db.execute(text("SELECT 1"))
+        db_latency_ms = int((datetime.now(timezone.utc) - started).total_seconds() * 1000)
     except Exception as exc:
         db_status = "error"
         db_error = str(exc)
+
+    last_trade_ts = db.query(func.max(Trade.executed_at)).scalar()
+    last_position_ts = db.query(func.max(Position.updated_at)).scalar()
+
+    candidates = [ts for ts in [last_trade_ts, last_position_ts] if ts is not None]
+    last_sync_at = max(candidates).isoformat() if candidates else None
 
     return {
         "binance": {
@@ -197,5 +206,10 @@ def diagnostics_connectors(db: Session = Depends(get_db)):
         "db": {
             "status": db_status,
             "error": db_error,
+            "latency_ms": db_latency_ms,
+        },
+        "sync": {
+            "last_sync_at": last_sync_at,
+            "server_time": datetime.now(timezone.utc).isoformat(),
         },
     }

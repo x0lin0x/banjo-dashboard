@@ -18,7 +18,7 @@ Base URL: `http://localhost:8000/api/v1`
 - `GET /risk/exposure`
 - `GET /trades?limit=100&symbol=BTCUSDT`
 - `GET /positions`
-- `GET /diagnostics/connectors`
+- `GET /diagnostics/connectors` (db status/latency, binance mode, last sync)
 - `POST /sync/trades?symbol=BTCUSDT&limit=100`
 - `POST /sync/positions`
 - `POST /sync/all?symbol=BTCUSDT&limit=100`

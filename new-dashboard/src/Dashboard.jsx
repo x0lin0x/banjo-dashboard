@@ -41,6 +41,24 @@ function Badge({ ok, label }) {
   )
 }
 
+function exportCsv(filename, rows) {
+  if (!rows?.length) return
+  const headers = Object.keys(rows[0])
+  const esc = (v) => {
+    const s = String(v ?? '')
+    return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s
+  }
+  const body = rows.map((r) => headers.map((h) => esc(r[h])).join(',')).join('\n')
+  const csv = `${headers.join(',')}\n${body}`
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 function Dashboard() {
   const [stats, setStats] = useState(null)
   const [risk, setRisk] = useState(null)
@@ -50,14 +68,16 @@ function Dashboard() {
   const [diag, setDiag] = useState(null)
   const [syncing, setSyncing] = useState(false)
 
+  const [windowFilter, setWindowFilter] = useState('30d')
+  const [refreshSec, setRefreshSec] = useState('off')
   const [symbolFilter, setSymbolFilter] = useState('')
   const [tradeLimit, setTradeLimit] = useState(25)
 
   const loadBase = () => {
     Promise.all([
-      fetch(`${API_URL}/stats/overview?window=30d`).then((r) => r.json()),
+      fetch(`${API_URL}/stats/overview?window=${windowFilter}`).then((r) => r.json()),
       fetch(`${API_URL}/risk/exposure`).then((r) => r.json()),
-      fetch(`${API_URL}/stats/equity?window=30d`).then((r) => r.json()),
+      fetch(`${API_URL}/stats/equity?window=${windowFilter}`).then((r) => r.json()),
       fetch(`${API_URL}/positions`).then((r) => r.json()),
       fetch(`${API_URL}/diagnostics/connectors`).then((r) => r.json())
     ])
@@ -101,11 +121,21 @@ function Dashboard() {
   useEffect(() => {
     loadBase()
     loadTrades()
-  }, [])
+  }, [windowFilter])
 
   useEffect(() => {
     loadTrades()
   }, [symbolFilter, tradeLimit])
+
+  useEffect(() => {
+    if (refreshSec === 'off') return undefined
+    const ms = Number(refreshSec) * 1000
+    const id = setInterval(() => {
+      loadBase()
+      loadTrades()
+    }, ms)
+    return () => clearInterval(id)
+  }, [refreshSec, windowFilter, symbolFilter, tradeLimit])
 
   const ddColor = useMemo(() => ((stats?.max_drawdown_pct || 0) > ALERT_THRESHOLDS.ddPct ? '#ff3131' : '#ffae00'), [stats])
 
@@ -128,12 +158,32 @@ function Dashboard() {
     <div style={{ minHeight: '100vh', background: '#0a0a0f', color: 'white', padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <h1 style={{ color: '#b026ff', textShadow: '0 0 10px #b026ff', marginTop: 0, marginBottom: 0 }}>⚡ BANJO TRADING DASHBOARD</h1>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <Badge ok={diag?.db?.status === 'ok'} label={`DB: ${diag?.db?.status || 'unknown'}`} />
           <Badge ok={diag?.binance?.status === 'configured'} label={`BINANCE: ${diag?.binance?.status || 'unknown'}`} />
+          <select value={windowFilter} onChange={(e) => setWindowFilter(e.target.value)} style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}>
+            <option value='24h'>24h</option>
+            <option value='7d'>7d</option>
+            <option value='30d'>30d</option>
+          </select>
+          <select value={refreshSec} onChange={(e) => setRefreshSec(e.target.value)} style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}>
+            <option value='off'>Auto-refresh: off</option>
+            <option value='10'>Auto-refresh: 10s</option>
+            <option value='30'>Auto-refresh: 30s</option>
+            <option value='60'>Auto-refresh: 60s</option>
+          </select>
           <button onClick={syncNow} disabled={syncing} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700, opacity: syncing ? 0.7 : 1 }}>
             {syncing ? 'Syncing...' : 'Sync now'}
           </button>
+        </div>
+      </div>
+
+      <div style={panelStyle()}>
+        <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Runtime diagnostics</h3>
+        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', color: '#cfd3ff' }}>
+          <span>Last sync: <strong>{diag?.sync?.last_sync_at ? new Date(diag.sync.last_sync_at).toLocaleString() : 'n/a'}</strong></span>
+          <span>DB latency: <strong>{diag?.db?.latency_ms ?? 'n/a'} ms</strong></span>
+          <span>Server time: <strong>{diag?.sync?.server_time ? new Date(diag.sync.server_time).toLocaleString() : 'n/a'}</strong></span>
         </div>
       </div>
 
@@ -163,7 +213,7 @@ function Dashboard() {
       </div>
 
       <div style={panelStyle()}>
-        <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Equity trend (30d realized cumulative)</h3>
+        <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Equity trend ({windowFilter} realized cumulative)</h3>
         <div style={{ width: '100%', height: 260 }}>
           <ResponsiveContainer>
             <LineChart data={equity}>
@@ -179,7 +229,7 @@ function Dashboard() {
       <div style={panelStyle()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <h3 style={{ margin: 0, color: '#c8c8ff' }}>Trades</h3>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <input
               value={symbolFilter}
               onChange={(e) => setSymbolFilter(e.target.value)}
@@ -192,6 +242,7 @@ function Dashboard() {
               <option value={100}>100</option>
             </select>
             <button onClick={loadTrades} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>Refresh</button>
+            <button onClick={() => exportCsv('trades.csv', trades)} style={{ background: '#8ab4ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>Export CSV</button>
           </div>
         </div>
 
@@ -226,7 +277,10 @@ function Dashboard() {
       </div>
 
       <div style={panelStyle()}>
-        <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Positions</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <h3 style={{ marginTop: 0, color: '#c8c8ff', marginBottom: 0 }}>Positions</h3>
+          <button onClick={() => exportCsv('positions.csv', positions)} style={{ background: '#8ab4ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>Export CSV</button>
+        </div>
         <div style={{ marginTop: 10, overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
