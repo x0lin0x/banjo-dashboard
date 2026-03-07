@@ -18,7 +18,8 @@ Base URL: `http://localhost:8000/api/v1`
 - `GET /risk/exposure`
 - `GET /trades?limit=100&offset=0&window=24h|7d|30d&sort_by=executed_at|symbol|realized_pnl&sort_dir=asc|desc&symbol=BTCUSDT`
 - `GET /positions`
-- `GET /diagnostics/connectors` (db status/latency, binance mode, last sync)
+- `GET /diagnostics/connectors` (db status/latency, binance mode, last sync, security mode)
+- `GET /sync/events?limit=20` (latest sync action logs)
 - `GET /audit/summary?window=24h|7d|30d` (counts, realized, fees, checksum)
 - `GET /audit/trades?window=24h|7d|30d&limit=100&offset=0` (paged audit rows + page checksum)
 - `GET /audit/trades.csv?window=24h|7d|30d` (backend CSV export)
@@ -73,6 +74,7 @@ Backend reads `.env` (optional) and supports:
 - `BINANCE_BASE_URL` (default `https://fapi.binance.com`)
 - `APP_READ_ONLY` (`true|false`, when true all `/sync/*` are disabled)
 - `SYNC_API_TOKEN` (optional; when set, required via `X-API-Token` header for `/sync/*`)
+- `SYNC_MIN_INTERVAL_SECONDS` (default `5`, in-memory rate limit per actor+endpoint)
 
 If Binance keys are missing, sync service returns mock data for development.
 

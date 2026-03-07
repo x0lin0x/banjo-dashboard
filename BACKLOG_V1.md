@@ -36,6 +36,12 @@
 - [x] Mode read-only (`APP_READ_ONLY`) bloquant sync
 - [x] UI sync token + gestion erreur auth/read-only
 
+## V2.1 — Reliability / Audit
+- [x] Rate limit sync (`SYNC_MIN_INTERVAL_SECONDS`)
+- [x] Audit log `sync_events` (endpoint, actor, status, duration, detail)
+- [x] Endpoint `GET /api/v1/sync/events`
+- [x] Front panel "Last sync events"
+
 ## S3 — Extensions
 - [ ] Multi-stratégies / tags TradingView
 - [ ] Multi-exchange (Hyperliquid)

@@ -80,6 +80,7 @@ function Dashboard() {
   const [diag, setDiag] = useState(null)
   const [audit, setAudit] = useState(null)
   const [auditTradesMeta, setAuditTradesMeta] = useState({ total: 0, limit: 25, offset: 0, checksum: '' })
+  const [syncEvents, setSyncEvents] = useState([])
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState('')
 
@@ -105,15 +106,17 @@ function Dashboard() {
       fetch(`${API_URL}/stats/equity?window=${windowFilter}`).then((r) => r.json()),
       fetch(`${API_URL}/positions`).then((r) => r.json()),
       fetch(`${API_URL}/diagnostics/connectors`).then((r) => r.json()),
-      fetch(`${API_URL}/audit/summary?window=${windowFilter}`).then((r) => r.json())
+      fetch(`${API_URL}/audit/summary?window=${windowFilter}`).then((r) => r.json()),
+      fetch(`${API_URL}/sync/events?limit=8`).then((r) => r.json())
     ])
-      .then(([overview, riskRes, equityRes, positionsRes, diagRes, auditRes]) => {
+      .then(([overview, riskRes, equityRes, positionsRes, diagRes, auditRes, eventsRes]) => {
         setStats(overview)
         setRisk(riskRes)
         setEquity(equityRes?.points || [])
         setPositions(positionsRes?.positions || [])
         setDiag(diagRes)
         setAudit(auditRes)
+        setSyncEvents(eventsRes?.events || [])
       })
       .catch(() => {
         setStats(null)
@@ -122,6 +125,7 @@ function Dashboard() {
         setPositions([])
         setDiag(null)
         setAudit(null)
+        setSyncEvents([])
       })
   }
 
@@ -352,6 +356,39 @@ function Dashboard() {
           <span>Last sync: <strong>{diag?.sync?.last_sync_at ? new Date(diag.sync.last_sync_at).toLocaleString() : 'n/a'}</strong></span>
           <span>DB latency: <strong>{diag?.db?.latency_ms ?? 'n/a'} ms</strong></span>
           <span>Server time: <strong>{diag?.sync?.server_time ? new Date(diag.sync.server_time).toLocaleString() : 'n/a'}</strong></span>
+          <span>Min sync interval: <strong>{diag?.sync?.min_interval_seconds ?? 'n/a'}s</strong></span>
+        </div>
+      </div>
+
+      <div style={panelStyle()}>
+        <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Last sync events</h3>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ color: '#8b8ba7', textAlign: 'left', borderBottom: '1px solid #2a2a3f' }}>
+                <th style={{ padding: 8 }}>Time</th>
+                <th style={{ padding: 8 }}>Endpoint</th>
+                <th style={{ padding: 8 }}>Status</th>
+                <th style={{ padding: 8 }}>Actor</th>
+                <th style={{ padding: 8 }}>Symbol</th>
+                <th style={{ padding: 8 }}>Duration</th>
+                <th style={{ padding: 8 }}>Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              {syncEvents.map((e) => (
+                <tr key={e.id} style={{ borderBottom: '1px solid #1c1c2b' }}>
+                  <td style={{ padding: 8 }}>{e.created_at ? new Date(e.created_at).toLocaleString() : '-'}</td>
+                  <td style={{ padding: 8 }}>{e.endpoint}</td>
+                  <td style={{ padding: 8, color: e.status === 'ok' ? '#39ff14' : '#ff6b6b' }}>{e.status}</td>
+                  <td style={{ padding: 8 }}>{e.actor || '-'}</td>
+                  <td style={{ padding: 8 }}>{e.symbol || '-'}</td>
+                  <td style={{ padding: 8 }}>{e.duration_ms ?? '-'} ms</td>
+                  <td style={{ padding: 8, color: '#b7bbd8' }}>{e.detail || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 

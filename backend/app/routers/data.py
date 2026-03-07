@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.position import Position
+from app.models.sync_event import SyncEvent
 from app.models.trade import Trade
 
 router = APIRouter(prefix="/api/v1", tags=["data"])
@@ -205,6 +206,29 @@ def get_positions(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/sync/events")
+def sync_events(
+    limit: int = Query(default=20, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    rows = db.query(SyncEvent).order_by(SyncEvent.created_at.desc()).limit(limit).all()
+    return {
+        "events": [
+            {
+                "id": e.id,
+                "endpoint": e.endpoint,
+                "status": e.status,
+                "detail": e.detail,
+                "actor": e.actor,
+                "symbol": e.symbol,
+                "duration_ms": e.duration_ms,
+                "created_at": e.created_at.isoformat() if e.created_at else None,
+            }
+            for e in rows
+        ]
+    }
+
+
 @router.get("/diagnostics/connectors")
 def diagnostics_connectors(db: Session = Depends(get_db)):
     db_status = "ok"
@@ -239,6 +263,7 @@ def diagnostics_connectors(db: Session = Depends(get_db)):
             "server_time": datetime.now(timezone.utc).isoformat(),
             "read_only": settings.app_read_only,
             "token_required": bool(settings.sync_api_token),
+            "min_interval_seconds": settings.sync_min_interval_seconds,
         },
     }
 

@@ -1,3 +1,5 @@
 from app.models.position import Position
+from app.models.sync_event import SyncEvent
 from app.models.trade import Trade
-__all__ = ["Trade", "Position"]
+
+__all__ = ["Trade", "Position", "SyncEvent"]

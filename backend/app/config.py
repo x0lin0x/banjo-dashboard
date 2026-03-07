@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     debug: bool = True
     app_read_only: bool = False
     sync_api_token: str = ""
+    sync_min_interval_seconds: int = 5
     database_url: str = "sqlite:///./trading.db"
     binance_api_key: str = ""
     binance_api_secret: str = ""
