@@ -363,7 +363,7 @@ function Dashboard() {
               style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}
             />
           )}
-          <button onClick={syncNow} disabled={syncing || !diag?.sync?.can_sync} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700, opacity: syncing || !diag?.sync?.can_sync ? 0.5 : 1 }}>
+          <button onClick={syncNow} disabled={syncing || (diag ? !diag?.sync?.can_sync : false)} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700, opacity: syncing || (diag ? !diag?.sync?.can_sync : false) ? 0.5 : 1 }}>
             {syncing ? 'Syncing...' : 'Sync now'}
           </button>
           <button onClick={resetUiSettings} style={{ background: '#2d2d45', color: '#fff', border: '1px solid #444466', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>
@@ -372,9 +372,9 @@ function Dashboard() {
         </div>
       </div>
 
-      {(!diag?.sync?.can_sync || syncError) && (
+      {((diag && !diag?.sync?.can_sync) || syncError) && (
         <div style={{ ...panelStyle(), border: '1px solid #ff6b6b' }}>
-          {!diag?.sync?.can_sync && (
+          {(diag && !diag?.sync?.can_sync) && (
             <div>
               <strong style={{ color: '#ff6b6b' }}>Sync locked:</strong>{' '}
               {diag?.sync?.can_sync_reason === 'app_read_only'
