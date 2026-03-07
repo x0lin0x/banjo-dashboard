@@ -42,6 +42,10 @@
 - [x] Endpoint `GET /api/v1/sync/events`
 - [x] Front panel "Last sync events"
 
+## V2.2 — Sync observability+
+- [x] Filtres sync events (endpoint/status) + pagination
+- [x] Export CSV sync events backend (`/api/v1/sync/events.csv`)
+
 ## S3 — Extensions
 - [ ] Multi-stratégies / tags TradingView
 - [ ] Multi-exchange (Hyperliquid)

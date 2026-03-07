@@ -81,6 +81,9 @@ function Dashboard() {
   const [audit, setAudit] = useState(null)
   const [auditTradesMeta, setAuditTradesMeta] = useState({ total: 0, limit: 25, offset: 0, checksum: '' })
   const [syncEvents, setSyncEvents] = useState([])
+  const [syncEventsMeta, setSyncEventsMeta] = useState({ total: 0, limit: 8, offset: 0 })
+  const [syncEventsFilterEndpoint, setSyncEventsFilterEndpoint] = useState('')
+  const [syncEventsFilterStatus, setSyncEventsFilterStatus] = useState('')
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState('')
 
@@ -106,17 +109,15 @@ function Dashboard() {
       fetch(`${API_URL}/stats/equity?window=${windowFilter}`).then((r) => r.json()),
       fetch(`${API_URL}/positions`).then((r) => r.json()),
       fetch(`${API_URL}/diagnostics/connectors`).then((r) => r.json()),
-      fetch(`${API_URL}/audit/summary?window=${windowFilter}`).then((r) => r.json()),
-      fetch(`${API_URL}/sync/events?limit=8`).then((r) => r.json())
+      fetch(`${API_URL}/audit/summary?window=${windowFilter}`).then((r) => r.json())
     ])
-      .then(([overview, riskRes, equityRes, positionsRes, diagRes, auditRes, eventsRes]) => {
+      .then(([overview, riskRes, equityRes, positionsRes, diagRes, auditRes]) => {
         setStats(overview)
         setRisk(riskRes)
         setEquity(equityRes?.points || [])
         setPositions(positionsRes?.positions || [])
         setDiag(diagRes)
         setAudit(auditRes)
-        setSyncEvents(eventsRes?.events || [])
       })
       .catch(() => {
         setStats(null)
@@ -125,7 +126,6 @@ function Dashboard() {
         setPositions([])
         setDiag(null)
         setAudit(null)
-        setSyncEvents([])
       })
   }
 
@@ -147,6 +147,26 @@ function Dashboard() {
       })
       .catch(() => {
         setAuditTradesMeta((p) => ({ ...p, total: 0, checksum: '' }))
+      })
+  }
+
+  const loadSyncEvents = () => {
+    const params = new URLSearchParams({
+      limit: String(syncEventsMeta.limit),
+      offset: String(syncEventsMeta.offset)
+    })
+    if (syncEventsFilterEndpoint.trim()) params.append('endpoint', syncEventsFilterEndpoint.trim())
+    if (syncEventsFilterStatus.trim()) params.append('status', syncEventsFilterStatus.trim())
+
+    fetch(`${API_URL}/sync/events?${params.toString()}`)
+      .then((r) => r.json())
+      .then((res) => {
+        setSyncEvents(res?.events || [])
+        setSyncEventsMeta((p) => ({ ...p, total: res?.total || 0 }))
+      })
+      .catch(() => {
+        setSyncEvents([])
+        setSyncEventsMeta((p) => ({ ...p, total: 0 }))
       })
   }
 
@@ -187,6 +207,7 @@ function Dashboard() {
       loadBase()
       loadTrades()
       loadAuditTradesMeta()
+      loadSyncEvents()
     } catch (err) {
       setSyncError(err?.message || 'Sync failed')
     } finally {
@@ -198,6 +219,7 @@ function Dashboard() {
     loadBase()
     loadTrades()
     loadAuditTradesMeta()
+    loadSyncEvents()
   }, [windowFilter])
 
   useEffect(() => {
@@ -213,15 +235,20 @@ function Dashboard() {
   }, [windowFilter, auditTradesMeta.limit, auditTradesMeta.offset])
 
   useEffect(() => {
+    loadSyncEvents()
+  }, [syncEventsMeta.limit, syncEventsMeta.offset, syncEventsFilterEndpoint, syncEventsFilterStatus])
+
+  useEffect(() => {
     if (refreshSec === 'off') return undefined
     const ms = Number(refreshSec) * 1000
     const id = setInterval(() => {
       loadBase()
       loadTrades()
       loadAuditTradesMeta()
+      loadSyncEvents()
     }, ms)
     return () => clearInterval(id)
-  }, [refreshSec, windowFilter, symbolFilter, tradeLimit, tradeOffset, tradeSortBy, tradeSortDir, auditTradesMeta.limit, auditTradesMeta.offset])
+  }, [refreshSec, windowFilter, symbolFilter, tradeLimit, tradeOffset, tradeSortBy, tradeSortDir, auditTradesMeta.limit, auditTradesMeta.offset, syncEventsMeta.limit, syncEventsMeta.offset, syncEventsFilterEndpoint, syncEventsFilterStatus])
 
   const ddColor = useMemo(() => ((stats?.max_drawdown_pct || 0) > alertThresholds.ddPct ? '#ff3131' : '#ffae00'), [stats, alertThresholds])
 
@@ -361,8 +388,45 @@ function Dashboard() {
       </div>
 
       <div style={panelStyle()}>
-        <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Last sync events</h3>
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <h3 style={{ marginTop: 0, color: '#c8c8ff', marginBottom: 0 }}>Last sync events</h3>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input
+              value={syncEventsFilterEndpoint}
+              onChange={(e) => {
+                setSyncEventsMeta((p) => ({ ...p, offset: 0 }))
+                setSyncEventsFilterEndpoint(e.target.value)
+              }}
+              placeholder='Filter endpoint (ex: sync/all)'
+              style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}
+            />
+            <select
+              value={syncEventsFilterStatus}
+              onChange={(e) => {
+                setSyncEventsMeta((p) => ({ ...p, offset: 0 }))
+                setSyncEventsFilterStatus(e.target.value)
+              }}
+              style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}
+            >
+              <option value=''>Status: all</option>
+              <option value='ok'>Status: ok</option>
+              <option value='error'>Status: error</option>
+            </select>
+            <select
+              value={syncEventsMeta.limit}
+              onChange={(e) => setSyncEventsMeta((p) => ({ ...p, limit: Number(e.target.value), offset: 0 }))}
+              style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}
+            >
+              <option value={8}>Rows 8</option>
+              <option value={20}>Rows 20</option>
+              <option value={50}>Rows 50</option>
+            </select>
+            <button onClick={() => window.open(`${API_URL}/sync/events.csv?${new URLSearchParams({ endpoint: syncEventsFilterEndpoint || '', status: syncEventsFilterStatus || '' }).toString()}`, '_blank')} style={{ background: '#8ab4ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>
+              Export events CSV
+            </button>
+          </div>
+        </div>
+        <div style={{ overflowX: 'auto', marginTop: 10 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ color: '#8b8ba7', textAlign: 'left', borderBottom: '1px solid #2a2a3f' }}>
@@ -389,6 +453,28 @@ function Dashboard() {
               ))}
             </tbody>
           </table>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, color: '#b7bbd8' }}>
+          <span>
+            Showing {syncEventsMeta.total === 0 ? 0 : syncEventsMeta.offset + 1} - {Math.min(syncEventsMeta.offset + syncEventsMeta.limit, syncEventsMeta.total)} of {syncEventsMeta.total}
+          </span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setSyncEventsMeta((p) => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}
+              disabled={syncEventsMeta.offset === 0}
+              style={{ background: '#1a1a2e', color: '#fff', border: '1px solid #2a2a3f', borderRadius: 8, padding: '6px 10px', opacity: syncEventsMeta.offset === 0 ? 0.5 : 1 }}
+            >
+              Prev
+            </button>
+            <button
+              onClick={() => setSyncEventsMeta((p) => ({ ...p, offset: p.offset + p.limit }))}
+              disabled={syncEventsMeta.offset + syncEventsMeta.limit >= syncEventsMeta.total}
+              style={{ background: '#1a1a2e', color: '#fff', border: '1px solid #2a2a3f', borderRadius: 8, padding: '6px 10px', opacity: syncEventsMeta.offset + syncEventsMeta.limit >= syncEventsMeta.total ? 0.5 : 1 }}
+            >
+              Next
+            </button>
+            <button onClick={loadSyncEvents} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '6px 10px', fontWeight: 700 }}>Refresh</button>
+          </div>
         </div>
       </div>
 

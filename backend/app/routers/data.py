@@ -206,13 +206,30 @@ def get_positions(db: Session = Depends(get_db)):
     }
 
 
+def _sync_events_query(db: Session, endpoint: str | None, status_value: str | None):
+    q = db.query(SyncEvent)
+    if endpoint:
+        q = q.filter(SyncEvent.endpoint == endpoint)
+    if status_value:
+        q = q.filter(SyncEvent.status == status_value)
+    return q
+
+
 @router.get("/sync/events")
 def sync_events(
     limit: int = Query(default=20, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    endpoint: str | None = Query(default=None),
+    status_value: str | None = Query(default=None, alias="status", pattern="^(ok|error)$"),
     db: Session = Depends(get_db),
 ):
-    rows = db.query(SyncEvent).order_by(SyncEvent.created_at.desc()).limit(limit).all()
+    q = _sync_events_query(db, endpoint, status_value)
+    total = q.count()
+    rows = q.order_by(SyncEvent.created_at.desc()).offset(offset).limit(limit).all()
     return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
         "events": [
             {
                 "id": e.id,
@@ -227,6 +244,37 @@ def sync_events(
             for e in rows
         ]
     }
+
+
+@router.get("/sync/events.csv")
+def sync_events_csv(
+    endpoint: str | None = Query(default=None),
+    status_value: str | None = Query(default=None, alias="status", pattern="^(ok|error)$"),
+    db: Session = Depends(get_db),
+):
+    rows = _sync_events_query(db, endpoint, status_value).order_by(SyncEvent.created_at.desc()).all()
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["id", "created_at", "endpoint", "status", "actor", "symbol", "duration_ms", "detail"])
+    for e in rows:
+        writer.writerow([
+            e.id,
+            e.created_at.isoformat() if e.created_at else "",
+            e.endpoint,
+            e.status,
+            e.actor or "",
+            e.symbol or "",
+            e.duration_ms if e.duration_ms is not None else "",
+            e.detail or "",
+        ])
+
+    filename = "sync_events.csv"
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @router.get("/diagnostics/connectors")
