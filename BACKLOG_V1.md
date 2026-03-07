@@ -27,7 +27,7 @@
 - [ ] Reconciliation PnL dashboard vs exchange
 - [ ] Funding fees agrégés et affichés
 - [ ] Alertes seuils (DD, levier, erreurs sync)
-- [ ] Export CSV auditable (trades/equity)
+- [x] Export CSV auditable (trades/equity) + endpoint `/audit/summary`
 
 ## S3 — Extensions
 - [ ] Multi-stratégies / tags TradingView

@@ -1,5 +1,6 @@
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+import hashlib
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, text
@@ -234,4 +235,38 @@ def diagnostics_connectors(db: Session = Depends(get_db)):
             "last_sync_at": last_sync_at,
             "server_time": datetime.now(timezone.utc).isoformat(),
         },
+    }
+
+
+@router.get("/audit/summary")
+def audit_summary(
+    window: str = Query(default="30d", pattern="^(24h|7d|30d)$"),
+    db: Session = Depends(get_db),
+):
+    since = datetime.now(timezone.utc) - _parse_window(window)
+    trades = (
+        db.query(Trade)
+        .filter(Trade.executed_at >= since)
+        .order_by(Trade.executed_at.asc())
+        .all()
+    )
+
+    payload = "\n".join(
+        [
+            f"{t.binance_trade_id}|{t.symbol}|{t.side}|{float(t.qty)}|{float(t.price)}|{float(t.realized_pnl or 0)}|{t.executed_at.isoformat()}"
+            for t in trades
+        ]
+    )
+    checksum = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    total_realized = sum(float(t.realized_pnl or 0) for t in trades)
+    total_fees = sum(float(t.commission or 0) for t in trades)
+
+    return {
+        "window": window,
+        "trades_count": len(trades),
+        "total_realized_pnl": round(total_realized, 8),
+        "total_fees": round(total_fees, 8),
+        "checksum_sha256": checksum,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
     }

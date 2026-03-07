@@ -78,6 +78,7 @@ function Dashboard() {
   const [trades, setTrades] = useState([])
   const [positions, setPositions] = useState([])
   const [diag, setDiag] = useState(null)
+  const [audit, setAudit] = useState(null)
   const [syncing, setSyncing] = useState(false)
 
   const [windowFilter, setWindowFilter] = useState(saved.windowFilter || '30d')
@@ -100,14 +101,16 @@ function Dashboard() {
       fetch(`${API_URL}/risk/exposure`).then((r) => r.json()),
       fetch(`${API_URL}/stats/equity?window=${windowFilter}`).then((r) => r.json()),
       fetch(`${API_URL}/positions`).then((r) => r.json()),
-      fetch(`${API_URL}/diagnostics/connectors`).then((r) => r.json())
+      fetch(`${API_URL}/diagnostics/connectors`).then((r) => r.json()),
+      fetch(`${API_URL}/audit/summary?window=${windowFilter}`).then((r) => r.json())
     ])
-      .then(([overview, riskRes, equityRes, positionsRes, diagRes]) => {
+      .then(([overview, riskRes, equityRes, positionsRes, diagRes, auditRes]) => {
         setStats(overview)
         setRisk(riskRes)
         setEquity(equityRes?.points || [])
         setPositions(positionsRes?.positions || [])
         setDiag(diagRes)
+        setAudit(auditRes)
       })
       .catch(() => {
         setStats(null)
@@ -115,6 +118,7 @@ function Dashboard() {
         setEquity([])
         setPositions([])
         setDiag(null)
+        setAudit(null)
       })
   }
 
@@ -293,6 +297,16 @@ function Dashboard() {
         </div>
       </div>
 
+      <div style={panelStyle()}>
+        <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Audit summary ({windowFilter})</h3>
+        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', color: '#cfd3ff' }}>
+          <span>Trades: <strong>{audit?.trades_count ?? 0}</strong></span>
+          <span>Realized PnL: <strong>{audit?.total_realized_pnl ?? 0}</strong></span>
+          <span>Fees: <strong>{audit?.total_fees ?? 0}</strong></span>
+          <span>Checksum: <strong style={{ fontFamily: 'monospace' }}>{(audit?.checksum_sha256 || 'n/a').slice(0, 16)}...</strong></span>
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 24 }}>
         <Card label='POSITIONS' value={stats?.total_positions ?? 0} color='#b026ff' />
         <Card label='TRADES' value={stats?.total_trades ?? 0} color='#00f3ff' />
@@ -333,7 +347,10 @@ function Dashboard() {
       </div>
 
       <div style={panelStyle()}>
-        <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Equity trend ({windowFilter} realized cumulative)</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <h3 style={{ marginTop: 0, color: '#c8c8ff', marginBottom: 0 }}>Equity trend ({windowFilter} realized cumulative)</h3>
+          <button onClick={() => exportCsv('equity.csv', equity)} style={{ background: '#8ab4ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>Export CSV</button>
+        </div>
         <div style={{ width: '100%', height: 260 }}>
           <ResponsiveContainer>
             <LineChart data={equity}>

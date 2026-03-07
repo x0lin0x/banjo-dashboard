@@ -19,6 +19,7 @@ Base URL: `http://localhost:8000/api/v1`
 - `GET /trades?limit=100&offset=0&window=24h|7d|30d&sort_by=executed_at|symbol|realized_pnl&sort_dir=asc|desc&symbol=BTCUSDT`
 - `GET /positions`
 - `GET /diagnostics/connectors` (db status/latency, binance mode, last sync)
+- `GET /audit/summary?window=24h|7d|30d` (counts, realized, fees, checksum)
 - `POST /sync/trades?symbol=BTCUSDT&limit=100`
 - `POST /sync/positions`
 - `POST /sync/all?symbol=BTCUSDT&limit=100`
