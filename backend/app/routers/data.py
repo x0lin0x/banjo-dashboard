@@ -147,24 +147,28 @@ def get_stats_overview(
         .all()
     )
 
-    rolling = 0.0
-    peak = 0.0
-    max_drawdown_pct = 0.0
-    for t in window_trades:
-        rolling += float(t.realized_pnl or 0)
-        if rolling > peak:
-            peak = rolling
-        if peak > 0:
-            dd = ((peak - rolling) / peak) * 100
-            if dd > max_drawdown_pct:
-                max_drawdown_pct = dd
-
     # Window-aware metrics/counters
     total_realized_pnl = float(sum(float(t.realized_pnl or 0) for t in window_trades))
     aggregated_orders = _aggregate_trade_fills(window_trades)
     total_trades = len(aggregated_orders)
     total_closed_trades = _count_closed_positions(aggregated_orders)
     equity = total_realized_pnl + total_unrealized_pnl
+
+    # Drawdown proxy computed on an equity baseline to avoid absurd percentages.
+    baseline_equity = float(account_balance_total or account_balance_wallet or 1.0)
+    running_equity = baseline_equity
+    peak = baseline_equity
+    max_drawdown_pct = 0.0
+    for t in window_trades:
+        running_equity += float(t.realized_pnl or 0)
+        if running_equity > peak:
+            peak = running_equity
+        if peak > 0:
+            dd = ((peak - running_equity) / peak) * 100
+            if dd > max_drawdown_pct:
+                max_drawdown_pct = dd
+
+    max_drawdown_pct = max(0.0, min(max_drawdown_pct, 100.0))
 
     return {
         "total_trades": total_trades,
