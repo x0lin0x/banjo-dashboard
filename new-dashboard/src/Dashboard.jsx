@@ -832,7 +832,7 @@ function Dashboard() {
         <Card label='AVG R WIN' value={`${Number(stats?.avg_r_win_pct ?? 0).toFixed(2)}%`} color='#39ff14' />
         <Card label='AVG R BY TRADE' value={`${Number(stats?.avg_r_by_trade_pct ?? 0).toFixed(2)}R`} color={Number(stats?.avg_r_by_trade_pct ?? 0) >= 0 ? '#39ff14' : '#ff6b6b'} />
         <Card label='R BY TRADE SOURCE' value={`${stats?.avg_r_by_trade_source || 'n/a'}`} color='#8ab4ff' />
-        <Card label='CLOSED POSITIONS (window)' value={`${Number(stats?.total_closed_trades ?? 0)}`} color='#c8c8ff' />
+        <Card label='AVG HOLDING TIME' value={`${Number(stats?.avg_holding_hours ?? 0).toFixed(2)}h`} color='#ffd166' />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
@@ -847,6 +847,13 @@ function Dashboard() {
         <Card label='EXIT SL-LIKE' value={`${Number(stats?.exit_sl_like_count ?? 0)}`} color='#ff6b6b' />
         <Card label='EXIT OTHER' value={`${Number(stats?.exit_other_count ?? 0)}`} color='#ffd166' />
         <Card label='EXIT SOURCE' value={`${stats?.exit_reason_source || 'n/a'}`} color='#8ab4ff' />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
+        <Card label='EXIT EXACT COVERAGE' value={`${Number(stats?.exit_exact_coverage_pct ?? 0).toFixed(1)}%`} color={Number(stats?.exit_exact_coverage_pct ?? 0) >= 80 ? '#39ff14' : '#ffd166'} />
+        <Card label='EXIT EXACT COUNT' value={`${Number(stats?.exit_exact_count ?? 0)}`} color='#39ff14' />
+        <Card label='EXIT PROXY COUNT' value={`${Number(stats?.exit_proxy_count ?? 0)}`} color='#ff9f9f' />
+        <Card label='CLOSED POSITIONS (window)' value={`${Number(stats?.total_closed_trades ?? 0)}`} color='#c8c8ff' />
       </div>
       </>
       )}

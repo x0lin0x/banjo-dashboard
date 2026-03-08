@@ -584,6 +584,9 @@ def get_stats_overview(
     # Exit reason distribution:
     # exact when explicit exit_reason exists on closed positions, else proxy by pnl sign.
     explicit_reasons = [str(cp.get("exit_reason") or "").strip().lower() for cp in closed_positions if cp.get("exit_reason")]
+    exit_exact_count = len(explicit_reasons)
+    exit_proxy_count = max(0, len(closed_positions) - exit_exact_count)
+    exit_exact_coverage_pct = (exit_exact_count / len(closed_positions) * 100) if closed_positions else 0.0
     has_explicit_exit_reasons = len(explicit_reasons) > 0
 
     if has_explicit_exit_reasons:
@@ -789,6 +792,9 @@ def get_stats_overview(
         "exit_tp_like_count": int(exit_tp_like),
         "exit_sl_like_count": int(exit_sl_like),
         "exit_other_count": int(exit_other),
+        "exit_exact_count": int(exit_exact_count),
+        "exit_proxy_count": int(exit_proxy_count),
+        "exit_exact_coverage_pct": round(exit_exact_coverage_pct, 2),
         "data_quality": data_quality,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
