@@ -101,6 +101,8 @@ function Dashboard() {
   const [execEvents, setExecEvents] = useState([])
   const [execErrorsSeries, setExecErrorsSeries] = useState([])
   const [execStatusFilter, setExecStatusFilter] = useState('')
+  const [fundingTrend, setFundingTrend] = useState([])
+  const [fundingTrendSource, setFundingTrendSource] = useState('unavailable')
   const [auditTradesMeta, setAuditTradesMeta] = useState({ total: 0, limit: 25, offset: 0, checksum: '' })
   const [syncEvents, setSyncEvents] = useState([])
   const [syncEventsMeta, setSyncEventsMeta] = useState({ total: 0, limit: 8, offset: 0 })
@@ -143,9 +145,10 @@ function Dashboard() {
       fetch(`${API_URL}/health/runtime`).then((r) => r.json()),
       fetch(`${API_URL}/diagnostics/db-writable`).then((r) => r.json()),
       fetch(`${API_URL}/execution/summary?window=${windowFilter}`).then((r) => r.json()),
+      fetch(`${API_URL}/funding/trend?window=${windowFilter}`).then((r) => r.json()),
       fetch(`${API_URL}/audit/summary?window=${windowFilter}`).then((r) => r.json())
     ])
-      .then(([overview, riskRes, equityRes, positionsRes, diagRes, runtimeRes, dbWritableRes, execRes, auditRes]) => {
+      .then(([overview, riskRes, equityRes, positionsRes, diagRes, runtimeRes, dbWritableRes, execRes, fundingTrendRes, auditRes]) => {
         setStats(overview)
         setRisk(riskRes)
         setEquity(equityRes?.points || [])
@@ -154,6 +157,8 @@ function Dashboard() {
         setRuntimeHealth(runtimeRes)
         setDbWritable(dbWritableRes)
         setExecSummary(execRes)
+        setFundingTrend(fundingTrendRes?.points || [])
+        setFundingTrendSource(fundingTrendRes?.source || 'unavailable')
         setAudit(auditRes)
       })
       .catch(() => {
@@ -165,6 +170,8 @@ function Dashboard() {
         setRuntimeHealth(null)
         setDbWritable(null)
         setExecSummary(null)
+        setFundingTrend([])
+        setFundingTrendSource('unavailable')
         setAudit(null)
       })
   }
@@ -825,6 +832,21 @@ function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 18, marginTop: 18 }}>
         <Card label='MARGIN USED' value={`$${Number(stats?.margin_used_positions ?? 0).toFixed(2)}`} color='#ffd166' />
         <Card label='MAX DD (window)' value={`${stats?.max_drawdown_pct ?? 0}%`} color={ddColor} />
+      </div>
+
+      <div style={panelStyle()}>
+        <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Funding trend ({windowFilter})</h3>
+        <div style={{ color: '#8b8ba7', fontSize: 12, marginBottom: 8 }}>Source: {fundingTrendSource}</div>
+        <div style={{ width: '100%', height: 180 }}>
+          <ResponsiveContainer>
+            <LineChart data={fundingTrend}>
+              <XAxis dataKey='day' tick={{ fill: '#888', fontSize: 11 }} />
+              <YAxis tick={{ fill: '#888' }} />
+              <Tooltip />
+              <Line type='monotone' dataKey='funding_fee' stroke='#8ab4ff' dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>

@@ -492,6 +492,23 @@ def execution_events(
     }
 
 
+@router.get("/funding/trend")
+def funding_trend(
+    window: str = Query(default="7d", pattern="^(24h|7d|30d)$"),
+):
+    now_utc = datetime.now(timezone.utc)
+    since = now_utc - _parse_window(window)
+
+    try:
+        start_ms = int(since.timestamp() * 1000)
+        end_ms = int(now_utc.timestamp() * 1000)
+        by_day = binance_sync_service.fetch_funding_fees_by_day(start_time_ms=start_ms, end_time_ms=end_ms, max_pages=10)
+        points = [{"day": d, "funding_fee": round(float(v), 8)} for d, v in sorted(by_day.items())]
+        return {"window": window, "source": "exact_window", "points": points}
+    except Exception:
+        return {"window": window, "source": "unavailable", "points": []}
+
+
 @router.get("/stats/overview")
 def get_stats_overview(
     window: str = Query(default="30d", pattern="^(24h|7d|30d)$"),

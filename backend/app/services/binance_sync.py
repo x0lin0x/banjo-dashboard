@@ -177,6 +177,23 @@ class BinanceSyncService:
             out[symbol] = out.get(symbol, Decimal("0")) + income
         return out
 
+    def fetch_funding_fees_by_day(
+        self,
+        start_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+        max_pages: int = 5,
+    ) -> dict[str, Decimal]:
+        rows = self._fetch_funding_income_rows(start_time_ms=start_time_ms, end_time_ms=end_time_ms, max_pages=max_pages)
+        out: dict[str, Decimal] = {}
+        for r in rows:
+            ts = int(r.get("time", 0) or 0)
+            if ts <= 0:
+                continue
+            day = datetime.fromtimestamp(ts / 1000, tz=timezone.utc).date().isoformat()
+            income = Decimal(str(r.get("income", "0")))
+            out[day] = out.get(day, Decimal("0")) + income
+        return out
+
     def sync_trades(self, db: Session, symbol: str = "BTCUSDT", limit: int = 100) -> int:
         trades = self.fetch_recent_trades(symbol=symbol, limit=limit)
         inserted = 0

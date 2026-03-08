@@ -26,6 +26,7 @@ Base URL: `http://localhost:8000/api/v1`
 - `GET /execution/events?limit=20&offset=0&status=ok|error` (latest execution telemetry)
 - `POST /execution/events` (bot/runtime ingestion for execution telemetry + optional exact exit reason updates)
 - `GET /execution/errors-timeseries?window=24h|7d|30d` (error count by hour)
+- `GET /funding/trend?window=24h|7d|30d` (daily funding fee trend)
 - `GET /sync/events?limit=20&offset=0&endpoint=sync/all&status=ok|error` (latest sync action logs, filterable)
 - `GET /sync/events.csv?endpoint=sync/all&status=ok|error` (sync events CSV export)
 - `GET /audit/summary?window=24h|7d|30d` (counts, realized, fees, checksum)
