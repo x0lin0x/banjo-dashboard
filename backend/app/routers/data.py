@@ -477,20 +477,36 @@ def get_stats_overview(
     losses = [p for p in closed_pnls if p < 0]
 
     max_consecutive_losses = 0
-    streak = 0
+    max_consecutive_wins = 0
+    loss_streak = 0
+    win_streak = 0
     for p in closed_pnls:
         if p < 0:
-            streak += 1
-            if streak > max_consecutive_losses:
-                max_consecutive_losses = streak
+            loss_streak += 1
+            win_streak = 0
+            if loss_streak > max_consecutive_losses:
+                max_consecutive_losses = loss_streak
+        elif p > 0:
+            win_streak += 1
+            loss_streak = 0
+            if win_streak > max_consecutive_wins:
+                max_consecutive_wins = win_streak
         else:
-            streak = 0
+            loss_streak = 0
+            win_streak = 0
 
-    # current streak = trailing losses from newest closed positions backward
+    # current streaks = trailing same-sign closes from newest backward
     current_loss_streak = 0
+    current_win_streak = 0
     for p in reversed(closed_pnls):
         if p < 0:
             current_loss_streak += 1
+            if current_win_streak > 0:
+                break
+        elif p > 0:
+            current_win_streak += 1
+            if current_loss_streak > 0:
+                break
         else:
             break
 
@@ -696,6 +712,7 @@ def get_stats_overview(
         "top_funding_symbols": top_funding_symbols,
         "fee_drag_pct": round(fee_drag_pct, 4) if fee_drag_pct is not None else None,
         "funding_share_pct": round(funding_share_pct, 4) if funding_share_pct is not None else None,
+        "trading_fee_share_pct": round((100 - funding_share_pct), 4) if funding_share_pct is not None else None,
         "profit_factor": round(profit_factor, 4) if profit_factor is not None else None,
         "expectancy": round(expectancy, 8),
         "avg_win_loss_ratio": round(avg_win_loss_ratio, 4) if avg_win_loss_ratio is not None else None,
@@ -710,6 +727,8 @@ def get_stats_overview(
         "max_dd_duration_hours": round(max_dd_duration_hours, 2),
         "max_consecutive_losses": int(max_consecutive_losses),
         "current_loss_streak": int(current_loss_streak),
+        "max_consecutive_wins": int(max_consecutive_wins),
+        "current_win_streak": int(current_win_streak),
         "last_ath_balance": round(ath_balance_display, 8),
         "hours_since_last_ath": round(hours_since_ath, 2),
         "avg_r_loss_pct": round(avg_r_loss_pct, 4),

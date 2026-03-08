@@ -671,7 +671,7 @@ function Dashboard() {
         <Card label='WIN RATE LONG' value={`${Number(stats?.win_rate_long_pct ?? 0).toFixed(1)}%`} color='#39ff14' />
         <Card label='WIN RATE SHORT' value={`${Number(stats?.win_rate_short_pct ?? 0).toFixed(1)}%`} color='#ff6b6b' />
         <Card label='AVG HOLDING TIME' value={`${Number(stats?.avg_holding_hours ?? 0).toFixed(2)}h`} color='#ffd166' />
-        <Card label='CURRENT LOSS STREAK' value={`${Number(stats?.current_loss_streak ?? 0)}`} color='#ff9f9f' />
+        <Card label='CURRENT STREAK (L/W)' value={`${Number(stats?.current_loss_streak ?? 0)} / ${Number(stats?.current_win_streak ?? 0)}`} color='#ff9f9f' />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
