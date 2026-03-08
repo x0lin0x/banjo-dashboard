@@ -267,6 +267,13 @@ def execution_summary(
 
     total = q.count()
     errors = q.filter(ExecutionEvent.status == "error").count()
+    since_1h = datetime.now(timezone.utc) - timedelta(hours=1)
+    errors_1h = (
+        db.query(func.count(ExecutionEvent.id))
+        .filter(ExecutionEvent.created_at >= since_1h)
+        .filter(ExecutionEvent.status == "error")
+        .scalar()
+    ) or 0
     missed_like = (
         q.filter(ExecutionEvent.status == "error")
         .filter(ExecutionEvent.event_type.in_(["sync/all", "sync/trades", "sync/scan-all-symbols"]))
@@ -295,6 +302,7 @@ def execution_summary(
         "window": window,
         "total_events": total,
         "error_events": errors,
+        "error_events_1h": int(errors_1h),
         "missed_like_events": int(missed_like),
         "avg_latency_ms": round(avg_latency_ms, 2) if avg_latency_ms is not None else None,
         "p50_latency_ms": p50_latency_ms,
@@ -454,6 +462,26 @@ def get_stats_overview(
     closed_long = [cp for cp in closed_positions if cp.get("direction") == "LONG"]
     closed_short = [cp for cp in closed_positions if cp.get("direction") == "SHORT"]
 
+    closed_pnls = [float(cp.get("realized_pnl") or 0) for cp in closed_positions]
+    wins = [p for p in closed_pnls if p > 0]
+    losses = [p for p in closed_pnls if p < 0]
+
+    gross_profit = sum(wins)
+    gross_loss_abs = abs(sum(losses))
+    profit_factor = (gross_profit / gross_loss_abs) if gross_loss_abs > 0 else None
+
+    avg_win = (sum(wins) / len(wins)) if wins else 0.0
+    avg_loss_abs = (abs(sum(losses)) / len(losses)) if losses else 0.0
+    avg_win_loss_ratio = (avg_win / avg_loss_abs) if avg_loss_abs > 0 else None
+
+    win_rate_pct = (len(wins) / len(closed_pnls) * 100) if closed_pnls else 0.0
+    loss_rate_pct = (len(losses) / len(closed_pnls) * 100) if closed_pnls else 0.0
+    expectancy = (win_rate_pct / 100 * avg_win) - (loss_rate_pct / 100 * avg_loss_abs)
+
+    # Approx net after fees from aggregated orders in window.
+    total_fees_window = sum(float(o.get("commission") or 0) for o in aggregated_orders_window)
+    net_pnl_after_fees = total_realized_pnl - total_fees_window
+
     def _win_rate(rows: list[dict]) -> float:
         if not rows:
             return 0.0
@@ -586,6 +614,11 @@ def get_stats_overview(
         "total_positions": total_positions,
         "total_realized_pnl": total_realized_pnl,
         "total_unrealized_pnl": total_unrealized_pnl,
+        "net_pnl_after_fees": round(net_pnl_after_fees, 8),
+        "total_fees_window": round(total_fees_window, 8),
+        "profit_factor": round(profit_factor, 4) if profit_factor is not None else None,
+        "expectancy": round(expectancy, 8),
+        "avg_win_loss_ratio": round(avg_win_loss_ratio, 4) if avg_win_loss_ratio is not None else None,
         "equity": equity,
         "account_balance": account_balance_total,
         "account_balance_wallet": account_balance_wallet,

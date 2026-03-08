@@ -83,6 +83,7 @@ function Dashboard() {
   const [audit, setAudit] = useState(null)
   const [execEvents, setExecEvents] = useState([])
   const [execErrorsSeries, setExecErrorsSeries] = useState([])
+  const [execStatusFilter, setExecStatusFilter] = useState('')
   const [auditTradesMeta, setAuditTradesMeta] = useState({ total: 0, limit: 25, offset: 0, checksum: '' })
   const [syncEvents, setSyncEvents] = useState([])
   const [syncEventsMeta, setSyncEventsMeta] = useState({ total: 0, limit: 8, offset: 0 })
@@ -164,7 +165,10 @@ function Dashboard() {
   }
 
   const loadExecutionEvents = () => {
-    fetch(`${API_URL}/execution/events?limit=8&offset=0`)
+    const params = new URLSearchParams({ limit: '8', offset: '0' })
+    if (execStatusFilter) params.append('status', execStatusFilter)
+
+    fetch(`${API_URL}/execution/events?${params.toString()}`)
       .then((r) => r.json())
       .then((res) => {
         setExecEvents(res?.events || [])
@@ -294,6 +298,10 @@ function Dashboard() {
   useEffect(() => {
     loadSyncEvents()
   }, [syncEventsMeta.limit, syncEventsMeta.offset, syncEventsFilterEndpoint, syncEventsFilterStatus])
+
+  useEffect(() => {
+    loadExecutionEvents()
+  }, [execStatusFilter])
 
   useEffect(() => {
     if (refreshSec === 'off') return undefined
@@ -479,8 +487,8 @@ function Dashboard() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
         <Card label='EXEC EVENTS' value={execSummary?.total_events ?? 0} color='#8ab4ff' />
-        <Card label='MISSED-LIKE (window)' value={execSummary?.missed_like_events ?? 0} color='#ffd166' />
-        <Card label='EXEC ERRORS (window)' value={execSummary?.error_events ?? 0} color={Number(execSummary?.error_events ?? 0) > 0 ? '#ff6b6b' : '#39ff14'} />
+        <Card label='MISSED-LIKE (window)' value={execSummary?.missed_like_events ?? 0} color={Number(execSummary?.missed_like_events ?? 0) > 0 ? '#ff6b6b' : '#ffd166'} />
+        <Card label='EXEC ERRORS (1h)' value={execSummary?.error_events_1h ?? 0} color={Number(execSummary?.error_events_1h ?? 0) > 0 ? '#ff6b6b' : '#39ff14'} />
         <Card label='AVG EXEC LATENCY' value={execSummary?.avg_latency_ms == null ? 'n/a' : `${Number(execSummary.avg_latency_ms).toFixed(0)}ms`} color='#c8c8ff' />
       </div>
 
@@ -495,8 +503,15 @@ function Dashboard() {
       </div>
 
       <div style={panelStyle()}>
-        <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Execution quality ({windowFilter})</h3>
-        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', color: '#cfd3ff' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <h3 style={{ marginTop: 0, color: '#c8c8ff', marginBottom: 0 }}>Execution quality ({windowFilter})</h3>
+          <select value={execStatusFilter} onChange={(e) => setExecStatusFilter(e.target.value)} style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}>
+            <option value=''>Events: all</option>
+            <option value='ok'>Events: ok</option>
+            <option value='error'>Events: error</option>
+          </select>
+        </div>
+        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', color: '#cfd3ff', marginTop: 8 }}>
           <span>Total events: <strong>{execSummary?.total_events ?? 0}</strong></span>
           <span>Errors: <strong style={{ color: '#ff6b6b' }}>{execSummary?.error_events ?? 0}</strong></span>
           <span>Missed-like: <strong style={{ color: '#ff6b6b' }}>{execSummary?.missed_like_events ?? 0}</strong></span>
@@ -547,6 +562,13 @@ function Dashboard() {
         <Card label='CLOSED POSITIONS' value={stats?.total_closed_trades ?? stats?.total_trades ?? 0} color='#00f3ff' />
         <Card label='REALIZED P&L' value={`$${(stats?.total_realized_pnl ?? 0).toFixed?.(2) ?? '0.00'}`} color={(stats?.total_realized_pnl ?? 0) >= 0 ? '#39ff14' : '#ff3131'} />
         <Card label='UNREALIZED P&L' value={`$${(stats?.total_unrealized_pnl ?? 0).toFixed?.(2) ?? '0.00'}`} color={(stats?.total_unrealized_pnl ?? 0) >= 0 ? '#39ff14' : '#ff3131'} />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
+        <Card label='NET P&L AFTER FEES' value={`$${Number(stats?.net_pnl_after_fees ?? 0).toFixed(2)}`} color={Number(stats?.net_pnl_after_fees ?? 0) >= 0 ? '#39ff14' : '#ff6b6b'} />
+        <Card label='PROFIT FACTOR' value={stats?.profit_factor == null ? 'n/a' : Number(stats.profit_factor).toFixed(2)} color='#8ab4ff' />
+        <Card label='EXPECTANCY' value={`$${Number(stats?.expectancy ?? 0).toFixed(2)}`} color={Number(stats?.expectancy ?? 0) >= 0 ? '#39ff14' : '#ff6b6b'} />
+        <Card label='AVG WIN/LOSS' value={stats?.avg_win_loss_ratio == null ? 'n/a' : Number(stats.avg_win_loss_ratio).toFixed(2)} color='#ffd166' />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
