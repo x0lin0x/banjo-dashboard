@@ -464,6 +464,8 @@ def get_stats_overview(
     current_drawdown_pct = ((peak_wallet - running_wallet) / peak_wallet * 100) if peak_wallet > 0 else 0.0
     current_drawdown_pct = max(0.0, min(current_drawdown_pct, 100.0))
     current_dd_duration_hours = max(0.0, (now_utc - peak_ts).total_seconds() / 3600) if current_drawdown_pct > 0 else 0.0
+    # Keep duration metrics internally consistent for QA/UX comparisons.
+    max_dd_duration_hours = max(max_dd_duration_hours, current_dd_duration_hours)
 
     # Closed-position split metrics (window)
     closed_long = [cp for cp in closed_positions if cp.get("direction") == "LONG"]
