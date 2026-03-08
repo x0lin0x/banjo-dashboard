@@ -95,6 +95,7 @@ function Dashboard() {
   const [positions, setPositions] = useState([])
   const [diag, setDiag] = useState(null)
   const [runtimeHealth, setRuntimeHealth] = useState(null)
+  const [dbWritable, setDbWritable] = useState(null)
   const [execSummary, setExecSummary] = useState(null)
   const [audit, setAudit] = useState(null)
   const [execEvents, setExecEvents] = useState([])
@@ -140,16 +141,18 @@ function Dashboard() {
       fetch(`${API_URL}/positions`).then((r) => r.json()),
       fetch(`${API_URL}/diagnostics/connectors`).then((r) => r.json()),
       fetch(`${API_URL}/health/runtime`).then((r) => r.json()),
+      fetch(`${API_URL}/diagnostics/db-writable`).then((r) => r.json()),
       fetch(`${API_URL}/execution/summary?window=${windowFilter}`).then((r) => r.json()),
       fetch(`${API_URL}/audit/summary?window=${windowFilter}`).then((r) => r.json())
     ])
-      .then(([overview, riskRes, equityRes, positionsRes, diagRes, runtimeRes, execRes, auditRes]) => {
+      .then(([overview, riskRes, equityRes, positionsRes, diagRes, runtimeRes, dbWritableRes, execRes, auditRes]) => {
         setStats(overview)
         setRisk(riskRes)
         setEquity(equityRes?.points || [])
         setPositions(positionsRes?.positions || [])
         setDiag(diagRes)
         setRuntimeHealth(runtimeRes)
+        setDbWritable(dbWritableRes)
         setExecSummary(execRes)
         setAudit(auditRes)
       })
@@ -160,6 +163,7 @@ function Dashboard() {
         setPositions([])
         setDiag(null)
         setRuntimeHealth(null)
+        setDbWritable(null)
         setExecSummary(null)
         setAudit(null)
       })
@@ -620,6 +624,9 @@ function Dashboard() {
               <span>DB latency: <strong>{diag?.db?.latency_ms ?? 'n/a'} ms</strong></span>
               <span>Server time: <strong>{diag?.sync?.server_time ? new Date(diag.sync.server_time).toLocaleString() : 'n/a'}</strong></span>
               <span>Min sync interval: <strong>{diag?.sync?.min_interval_seconds ?? 'n/a'}s</strong></span>
+              {dbWritable?.is_writable === false && (
+                <span style={{ color: '#ff6b6b' }}><strong>DB writable:</strong> NO (file/dir permissions)</span>
+              )}
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 10, color: '#b7bbd8' }}>
               <span>Data quality:</span>

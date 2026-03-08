@@ -3,6 +3,8 @@ from datetime import datetime, timedelta, timezone
 import csv
 import hashlib
 import io
+import os
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
@@ -192,6 +194,37 @@ def health_runtime(db: Session = Depends(get_db)):
         "last_sync_at": _as_utc(last_sync).isoformat() if last_sync else None,
         "api_errors_24h": int(api_errors_24h),
         "source": "exact",
+    }
+
+
+@router.get("/diagnostics/db-writable")
+def diagnostics_db_writable():
+    db_url = str(settings.database_url or "")
+    if not db_url.startswith("sqlite:///"):
+        return {
+            "engine": "non-sqlite",
+            "database_url": db_url,
+            "is_writable": True,
+            "path": None,
+            "file_writable": None,
+            "dir_writable": None,
+        }
+
+    db_path = db_url.replace("sqlite:///", "", 1)
+    p = Path(db_path)
+    if not p.is_absolute():
+        p = (Path.cwd() / p).resolve()
+
+    file_w = (not p.exists()) or os.access(p, os.W_OK)
+    dir_w = os.access(p.parent, os.W_OK)
+
+    return {
+        "engine": "sqlite",
+        "database_url": db_url,
+        "is_writable": bool(file_w and dir_w),
+        "path": str(p),
+        "file_writable": bool(file_w),
+        "dir_writable": bool(dir_w),
     }
 
 
