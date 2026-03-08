@@ -432,9 +432,11 @@ def get_stats_overview(
     # Drawdown + ATH on WINDOW using reconstructed full path as baseline.
     running_wallet = start_wallet_est_all
     peak_wallet = running_wallet
+    peak_ts = since
     ath_wallet = running_wallet
     ath_ts = since
     max_drawdown_pct = 0.0
+    max_dd_duration_hours = 0.0
 
     close_wallet_by_ts: dict[datetime, float] = {}
     for t in all_trades:
@@ -445,6 +447,7 @@ def get_stats_overview(
         if ts >= since:
             if running_wallet > peak_wallet:
                 peak_wallet = running_wallet
+                peak_ts = ts
             if running_wallet > ath_wallet:
                 ath_wallet = running_wallet
                 ath_ts = ts
@@ -453,18 +456,32 @@ def get_stats_overview(
                 dd = ((peak_wallet - running_wallet) / peak_wallet) * 100
                 if dd > max_drawdown_pct:
                     max_drawdown_pct = dd
+                    max_dd_duration_hours = max(0.0, (ts - peak_ts).total_seconds() / 3600)
 
     if ath_ts.tzinfo is None:
         ath_ts = ath_ts.replace(tzinfo=timezone.utc)
     max_drawdown_pct = max(0.0, min(max_drawdown_pct, 100.0))
+    current_drawdown_pct = ((peak_wallet - running_wallet) / peak_wallet * 100) if peak_wallet > 0 else 0.0
+    current_drawdown_pct = max(0.0, min(current_drawdown_pct, 100.0))
 
     # Closed-position split metrics (window)
     closed_long = [cp for cp in closed_positions if cp.get("direction") == "LONG"]
     closed_short = [cp for cp in closed_positions if cp.get("direction") == "SHORT"]
 
-    closed_pnls = [float(cp.get("realized_pnl") or 0) for cp in closed_positions]
+    closed_positions_sorted = sorted(closed_positions, key=lambda cp: _as_utc(cp.get("closed_at")))
+    closed_pnls = [float(cp.get("realized_pnl") or 0) for cp in closed_positions_sorted]
     wins = [p for p in closed_pnls if p > 0]
     losses = [p for p in closed_pnls if p < 0]
+
+    max_consecutive_losses = 0
+    streak = 0
+    for p in closed_pnls:
+        if p < 0:
+            streak += 1
+            if streak > max_consecutive_losses:
+                max_consecutive_losses = streak
+        else:
+            streak = 0
 
     gross_profit = sum(wins)
     gross_loss_abs = abs(sum(losses))
@@ -625,6 +642,9 @@ def get_stats_overview(
         "account_available_est": round(account_available_est, 8) if account_available_est is not None else None,
         "margin_used_positions": round(margin_used_positions, 8),
         "max_drawdown_pct": round(max_drawdown_pct, 2),
+        "current_drawdown_pct": round(current_drawdown_pct, 2),
+        "max_dd_duration_hours": round(max_dd_duration_hours, 2),
+        "max_consecutive_losses": int(max_consecutive_losses),
         "last_ath_balance": round(ath_balance_display, 8),
         "hours_since_last_ath": round(hours_since_ath, 2),
         "avg_r_loss_pct": round(avg_r_loss_pct, 4),

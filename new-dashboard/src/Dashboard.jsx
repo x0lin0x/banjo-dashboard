@@ -592,31 +592,31 @@ function Dashboard() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
-        <Card label='LAST ATH (proxy)' value={stats?.last_ath_balance == null ? 'n/a' : `$${Number(stats.last_ath_balance).toFixed(2)}`} color='#ffd166' />
+        <Card label='CURRENT DD' value={`${Number(stats?.current_drawdown_pct ?? 0).toFixed(2)}%`} color={Number(stats?.current_drawdown_pct ?? 0) > 0 ? '#ff6b6b' : '#39ff14'} />
+        <Card label='MAX DD DURATION' value={`${Number(stats?.max_dd_duration_hours ?? 0).toFixed(1)}h`} color='#ffd166' />
+        <Card label='MAX CONSEC LOSSES' value={`${Number(stats?.max_consecutive_losses ?? 0)}`} color='#ff9f9f' />
         <Card label='HOURS SINCE ATH' value={`${Number(stats?.hours_since_last_ath ?? 0).toFixed(1)}h`} color='#c8c8ff' />
-        <Card label='GROSS LONG' value={`$${(risk?.gross_long_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#39ff14' />
-        <Card label='GROSS SHORT' value={`$${(risk?.gross_short_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#ff3131' />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
+        <Card label='LAST ATH (proxy)' value={stats?.last_ath_balance == null ? 'n/a' : `$${Number(stats.last_ath_balance).toFixed(2)}`} color='#ffd166' />
         <Card label='GROSS LONG' value={`$${(risk?.gross_long_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#39ff14' />
         <Card label='GROSS SHORT' value={`$${(risk?.gross_short_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#ff3131' />
         <Card label='AVG R LOSS' value={`${Number(stats?.avg_r_loss_pct ?? 0).toFixed(2)}%`} color='#ff6b6b' />
-        <Card label='AVG R WIN' value={`${Number(stats?.avg_r_win_pct ?? 0).toFixed(2)}%`} color='#39ff14' />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
+        <Card label='AVG R WIN' value={`${Number(stats?.avg_r_win_pct ?? 0).toFixed(2)}%`} color='#39ff14' />
         <Card label='AVG R BY TRADE' value={`${Number(stats?.avg_r_by_trade_pct ?? 0).toFixed(2)}R`} color={Number(stats?.avg_r_by_trade_pct ?? 0) >= 0 ? '#39ff14' : '#ff6b6b'} />
         <Card label='AVG LOSS $ (closed pos)' value={`$${Number(stats?.avg_r_loss_usd ?? 0).toFixed(2)}`} color='#ff9f9f' />
         <Card label='R LOSS SOURCE' value={`${stats?.avg_r_loss_source || 'n/a'} (${stats?.avg_r_loss_verified_samples ?? 0})`} color='#c8c8ff' />
-        <Card label='R BY TRADE SOURCE' value={`${stats?.avg_r_by_trade_source || 'n/a'}`} color='#8ab4ff' />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
+        <Card label='R BY TRADE SOURCE' value={`${stats?.avg_r_by_trade_source || 'n/a'}`} color='#8ab4ff' />
         <Card label='WIN RATE LONG' value={`${Number(stats?.win_rate_long_pct ?? 0).toFixed(1)}%`} color='#39ff14' />
         <Card label='WIN RATE SHORT' value={`${Number(stats?.win_rate_short_pct ?? 0).toFixed(1)}%`} color='#ff6b6b' />
         <Card label='AVG HOLDING TIME' value={`${Number(stats?.avg_holding_hours ?? 0).toFixed(2)}h`} color='#ffd166' />
-        <Card label='CLOSED POSITIONS (window)' value={`${Number(stats?.total_closed_trades ?? 0)}`} color='#c8c8ff' />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
