@@ -96,13 +96,14 @@ def _aggregate_trade_fills(trades: list[Trade]) -> list[dict]:
 
 
 def _extract_closed_positions(orders: list[dict]) -> list[dict]:
-    # Approximation from window-local flow:
-    # each time net qty crosses back through zero, we consider one closed position.
-    state: dict[str, dict] = defaultdict(lambda: {"net": 0.0, "cycle_pnl": 0.0})
+    # Deterministic derivation from order-level flow:
+    # every net exposure cycle per symbol that returns/crosses zero = one closed position.
+    state: dict[str, dict] = defaultdict(lambda: {"net": 0.0, "cycle_pnl": 0.0, "opened_at": None, "seq": 0})
     closed: list[dict] = []
 
     for o in sorted(orders, key=lambda x: x["executed_at"]):
         symbol = o["symbol"]
+        ts = _as_utc(o["executed_at"])
         qty = float(o.get("qty") or 0)
         pnl = float(o.get("realized_pnl") or 0)
         side = str(o.get("side") or "BUY").upper()
@@ -110,19 +111,30 @@ def _extract_closed_positions(orders: list[dict]) -> list[dict]:
 
         st = state[symbol]
         prev = st["net"]
+
+        # mark cycle open timestamp when flat -> non-flat
+        if prev == 0 and signed != 0:
+            st["opened_at"] = ts
+
         new = prev + signed
         st["cycle_pnl"] += pnl
 
         crossed_zero = (prev > 0 and new <= 0) or (prev < 0 and new >= 0)
         if prev != 0 and crossed_zero:
+            st["seq"] += 1
             closed.append(
                 {
+                    "id": f"{symbol}-{st['seq']}",
                     "symbol": symbol,
-                    "closed_at": o["executed_at"],
+                    "opened_at": st["opened_at"],
+                    "closed_at": ts,
                     "realized_pnl": st["cycle_pnl"],
+                    "direction": "LONG" if prev > 0 else "SHORT",
+                    "orders_count": None,
                 }
             )
             st["cycle_pnl"] = 0.0
+            st["opened_at"] = None
 
         st["net"] = new
 
@@ -445,6 +457,48 @@ def get_trades(
             }
             for t in page
         ]
+    }
+
+
+@router.get("/analytics/closed-positions")
+def get_closed_positions(
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    symbol: str | None = Query(default=None, min_length=3, max_length=20),
+    window: str | None = Query(default=None, pattern="^(24h|7d|30d)$"),
+    sort_dir: str = Query(default="desc", pattern="^(asc|desc)$"),
+    db: Session = Depends(get_db),
+):
+    q = db.query(Trade)
+    if symbol:
+        q = q.filter(Trade.symbol == symbol.upper())
+    if window:
+        since = datetime.now(timezone.utc) - _parse_window(window)
+        q = q.filter(Trade.executed_at >= since)
+
+    raw = q.order_by(Trade.executed_at.asc()).all()
+    orders = _aggregate_trade_fills(raw)
+    rows = _extract_closed_positions(orders)
+
+    rows.sort(key=lambda x: _as_utc(x["closed_at"]), reverse=(sort_dir == "desc"))
+    total = len(rows)
+    page = rows[offset: offset + limit]
+
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "closed_positions": [
+            {
+                "id": r["id"],
+                "symbol": r["symbol"],
+                "direction": r["direction"],
+                "opened_at": r["opened_at"].isoformat() if r.get("opened_at") else None,
+                "closed_at": r["closed_at"].isoformat() if r.get("closed_at") else None,
+                "realized_pnl": float(r["realized_pnl"]),
+            }
+            for r in page
+        ],
     }
 
 

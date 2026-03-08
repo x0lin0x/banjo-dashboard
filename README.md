@@ -18,6 +18,7 @@ Base URL: `http://localhost:8000/api/v1`
 - `GET /risk/exposure`
 - `GET /trades?limit=100&offset=0&window=24h|7d|30d&sort_by=executed_at|symbol|realized_pnl&sort_dir=asc|desc&symbol=BTCUSDT` (aggregated by order/fills)
 - `GET /positions?include_zero=false` (default hides zero-notional rows)
+- `GET /analytics/closed-positions?window=24h|7d|30d&limit=100&offset=0` (derived closed-position ledger)
 - `GET /diagnostics/connectors` (db status/latency, binance mode, last sync, security mode)
 - `GET /sync/events?limit=20&offset=0&endpoint=sync/all&status=ok|error` (latest sync action logs, filterable)
 - `GET /sync/events.csv?endpoint=sync/all&status=ok|error` (sync events CSV export)
