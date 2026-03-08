@@ -780,6 +780,7 @@ function Dashboard() {
       )}
 
       {showSections.tables && (
+      <>
       <div style={panelStyle()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <h3 style={{ margin: 0, color: '#c8c8ff' }}>Trades</h3>
@@ -1057,6 +1058,7 @@ function Dashboard() {
           </div>
         </div>
       </div>
+      </>
       )}
     </div>
   )
