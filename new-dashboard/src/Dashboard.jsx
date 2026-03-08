@@ -81,7 +81,6 @@ function Dashboard() {
   const [runtimeHealth, setRuntimeHealth] = useState(null)
   const [execSummary, setExecSummary] = useState(null)
   const [audit, setAudit] = useState(null)
-  const [execSummary, setExecSummary] = useState(null)
   const [execEvents, setExecEvents] = useState([])
   const [auditTradesMeta, setAuditTradesMeta] = useState({ total: 0, limit: 25, offset: 0, checksum: '' })
   const [syncEvents, setSyncEvents] = useState([])
@@ -90,6 +89,8 @@ function Dashboard() {
   const [syncEventsFilterStatus, setSyncEventsFilterStatus] = useState('')
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState('')
+  const [syncErrorStreak, setSyncErrorStreak] = useState(0)
+  const [autoSyncCooldownUntil, setAutoSyncCooldownUntil] = useState(null)
 
   const [windowFilter, setWindowFilter] = useState(saved.windowFilter || '30d')
   const [refreshSec, setRefreshSec] = useState(saved.refreshSec || 'off')
@@ -231,12 +232,20 @@ function Dashboard() {
         const payload = await res.json().catch(() => ({}))
         throw new Error(payload?.detail || `Sync failed (${res.status})`)
       }
+      setSyncErrorStreak(0)
+      setAutoSyncCooldownUntil(null)
       loadBase()
       loadTrades()
       loadAuditTradesMeta()
       loadSyncEvents()
       loadExecutionEvents()
     } catch (err) {
+      const nextStreak = syncErrorStreak + 1
+      setSyncErrorStreak(nextStreak)
+      if (nextStreak >= 3) {
+        setAutoSyncCooldownUntil(Date.now() + 10 * 60 * 1000)
+      }
+
       if (err?.name === 'AbortError') {
         setSyncError('Sync timeout after 90s. Reduce symbols or retry.')
       } else {
@@ -291,10 +300,11 @@ function Dashboard() {
     const id = setInterval(() => {
       if (syncing) return
       if (diag && !diag?.sync?.can_sync) return
+      if (autoSyncCooldownUntil && Date.now() < autoSyncCooldownUntil) return
       syncNow()
     }, ms)
     return () => clearInterval(id)
-  }, [autoSyncSec, syncing, diag, syncToken])
+  }, [autoSyncSec, syncing, diag, syncToken, autoSyncCooldownUntil])
 
   const ddColor = useMemo(() => ((stats?.max_drawdown_pct || 0) > alertThresholds.ddPct ? '#ff3131' : '#ffae00'), [stats, alertThresholds])
 
@@ -439,6 +449,9 @@ function Dashboard() {
           {syncError && (
             <div><strong style={{ color: '#ff6b6b' }}>Sync error:</strong> {syncError}</div>
           )}
+          {autoSyncCooldownUntil && Date.now() < autoSyncCooldownUntil && (
+            <div><strong style={{ color: '#ffd166' }}>Auto-sync cooldown:</strong> active until {new Date(autoSyncCooldownUntil).toLocaleTimeString()} after repeated sync errors.</div>
+          )}
         </div>
       )}
 
@@ -471,7 +484,10 @@ function Dashboard() {
         <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', color: '#cfd3ff' }}>
           <span>Total events: <strong>{execSummary?.total_events ?? 0}</strong></span>
           <span>Errors: <strong style={{ color: '#ff6b6b' }}>{execSummary?.error_events ?? 0}</strong></span>
+          <span>Missed-like: <strong style={{ color: '#ff6b6b' }}>{execSummary?.missed_like_events ?? 0}</strong></span>
           <span>Avg latency: <strong>{execSummary?.avg_latency_ms == null ? 'n/a' : `${Number(execSummary.avg_latency_ms).toFixed(0)} ms`}</strong></span>
+          <span>P50: <strong>{execSummary?.p50_latency_ms == null ? 'n/a' : `${execSummary.p50_latency_ms} ms`}</strong></span>
+          <span>P95: <strong>{execSummary?.p95_latency_ms == null ? 'n/a' : `${execSummary.p95_latency_ms} ms`}</strong></span>
         </div>
         <div style={{ marginTop: 10, overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>

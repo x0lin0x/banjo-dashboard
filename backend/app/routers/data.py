@@ -267,20 +267,38 @@ def execution_summary(
 
     total = q.count()
     errors = q.filter(ExecutionEvent.status == "error").count()
+    missed_like = (
+        q.filter(ExecutionEvent.status == "error")
+        .filter(ExecutionEvent.event_type.in_(["sync/all", "sync/trades", "sync/scan-all-symbols"]))
+        .count()
+    )
 
     lat_rows = (
         q.filter(ExecutionEvent.status == "ok")
         .filter(ExecutionEvent.latency_ms.isnot(None))
         .all()
     )
-    latencies = [int(r.latency_ms) for r in lat_rows if r.latency_ms is not None]
+    latencies = sorted([int(r.latency_ms) for r in lat_rows if r.latency_ms is not None])
+
+    def _pct(vals: list[int], p: float):
+        if not vals:
+            return None
+        idx = int(round((len(vals) - 1) * p))
+        idx = max(0, min(idx, len(vals) - 1))
+        return vals[idx]
+
     avg_latency_ms = (sum(latencies) / len(latencies)) if latencies else None
+    p50_latency_ms = _pct(latencies, 0.50)
+    p95_latency_ms = _pct(latencies, 0.95)
 
     return {
         "window": window,
         "total_events": total,
         "error_events": errors,
+        "missed_like_events": int(missed_like),
         "avg_latency_ms": round(avg_latency_ms, 2) if avg_latency_ms is not None else None,
+        "p50_latency_ms": p50_latency_ms,
+        "p95_latency_ms": p95_latency_ms,
     }
 
 

@@ -21,7 +21,7 @@ Base URL: `http://localhost:8000/api/v1`
 - `GET /analytics/closed-positions?window=24h|7d|30d&limit=100&offset=0` (derived closed-position ledger)
 - `GET /diagnostics/connectors` (db status/latency, binance mode, last sync, security mode)
 - `GET /health/runtime` (bot status, heartbeat age, open positions, open uPnL, API errors 24h)
-- `GET /execution/summary?window=24h|7d|30d` (events count, errors, avg latency)
+- `GET /execution/summary?window=24h|7d|30d` (events count, errors, missed-like, avg latency, p50, p95)
 - `GET /execution/events?limit=20&offset=0&status=ok|error` (latest execution telemetry)
 - `GET /execution/summary?window=24h|7d|30d` (execution events KPI: errors/missed/latency)
 - `GET /execution/events?window=24h|7d|30d&status=ok|error&limit=50&offset=0`
