@@ -225,15 +225,15 @@ def get_stats_overview(
 
     losing_rs_pct_verified: list[float] = []
     losing_rs_pct_proxy: list[float] = []
+    winning_rs_pct_verified: list[float] = []
+    winning_rs_pct_proxy: list[float] = []
+    all_r_signed_verified: list[float] = []
+    all_r_signed_proxy: list[float] = []
     losing_pnls_usd: list[float] = []
 
     for cp in closed_positions:
         pnl = float(cp["realized_pnl"])
-        if pnl >= 0:
-            continue
-
         cts = _as_utc(cp["closed_at"])
-        losing_pnls_usd.append(abs(pnl))
 
         # Snapshot lookup: latest snapshot <= close timestamp
         snap_ref = None
@@ -244,15 +244,37 @@ def get_stats_overview(
                 break
 
         if snap_ref and snap_ref > 0:
-            losing_rs_pct_verified.append(abs(pnl) / snap_ref * 100)
+            denom = snap_ref
+            r_signed = pnl / denom * 100
+            all_r_signed_verified.append(r_signed)
+            if pnl < 0:
+                losing_pnls_usd.append(abs(pnl))
+                losing_rs_pct_verified.append(abs(r_signed))
+            elif pnl > 0:
+                winning_rs_pct_verified.append(abs(r_signed))
         else:
             wallet_at_close = float(close_wallet_by_ts.get(cts, current_wallet))
             denom = max(abs(wallet_at_close), 1e-9)
-            losing_rs_pct_proxy.append(abs(pnl) / denom * 100)
+            r_signed = pnl / denom * 100
+            all_r_signed_proxy.append(r_signed)
+            if pnl < 0:
+                losing_pnls_usd.append(abs(pnl))
+                losing_rs_pct_proxy.append(abs(r_signed))
+            elif pnl > 0:
+                winning_rs_pct_proxy.append(abs(r_signed))
 
     avg_r_loss_pct_verified = (sum(losing_rs_pct_verified) / len(losing_rs_pct_verified)) if losing_rs_pct_verified else 0.0
     avg_r_loss_pct_proxy = (sum(losing_rs_pct_proxy) / len(losing_rs_pct_proxy)) if losing_rs_pct_proxy else 0.0
     avg_r_loss_pct = avg_r_loss_pct_verified if losing_rs_pct_verified else avg_r_loss_pct_proxy
+
+    avg_r_win_pct_verified = (sum(winning_rs_pct_verified) / len(winning_rs_pct_verified)) if winning_rs_pct_verified else 0.0
+    avg_r_win_pct_proxy = (sum(winning_rs_pct_proxy) / len(winning_rs_pct_proxy)) if winning_rs_pct_proxy else 0.0
+    avg_r_win_pct = avg_r_win_pct_verified if winning_rs_pct_verified else avg_r_win_pct_proxy
+
+    avg_r_by_trade_pct_verified = (sum(all_r_signed_verified) / len(all_r_signed_verified)) if all_r_signed_verified else 0.0
+    avg_r_by_trade_pct_proxy = (sum(all_r_signed_proxy) / len(all_r_signed_proxy)) if all_r_signed_proxy else 0.0
+    avg_r_by_trade_pct = avg_r_by_trade_pct_verified if all_r_signed_verified else avg_r_by_trade_pct_proxy
+
     avg_r_loss_usd = (sum(losing_pnls_usd) / len(losing_pnls_usd)) if losing_pnls_usd else 0.0
 
     current_balance_ref = float(account_balance_total or account_balance_wallet or 0.0)
@@ -283,6 +305,14 @@ def get_stats_overview(
         "avg_r_loss_source": "snapshots" if losing_rs_pct_verified else "proxy",
         "avg_r_loss_verified_samples": len(losing_rs_pct_verified),
         "avg_r_loss_proxy_samples": len(losing_rs_pct_proxy),
+        "avg_r_win_pct": round(avg_r_win_pct, 4),
+        "avg_r_win_pct_verified": round(avg_r_win_pct_verified, 4),
+        "avg_r_win_pct_proxy": round(avg_r_win_pct_proxy, 4),
+        "avg_r_win_source": "snapshots" if winning_rs_pct_verified else "proxy",
+        "avg_r_by_trade_pct": round(avg_r_by_trade_pct, 4),
+        "avg_r_by_trade_pct_verified": round(avg_r_by_trade_pct_verified, 4),
+        "avg_r_by_trade_pct_proxy": round(avg_r_by_trade_pct_proxy, 4),
+        "avg_r_by_trade_source": "snapshots" if all_r_signed_verified else "proxy",
         "avg_r_loss_pct_current_balance": round(avg_r_loss_pct_current_balance, 4),
         "avg_r_loss_usd": round(avg_r_loss_usd, 8),
         "losing_closed_positions": len(losing_pnls_usd),
