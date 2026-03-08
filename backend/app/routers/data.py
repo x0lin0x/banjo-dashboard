@@ -265,8 +265,7 @@ def health_runtime(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/diagnostics/db-writable")
-def diagnostics_db_writable():
+def _db_writable_status() -> dict:
     db_url = str(settings.database_url or "")
     if not db_url.startswith("sqlite:///"):
         return {
@@ -293,6 +292,83 @@ def diagnostics_db_writable():
         "path": str(p),
         "file_writable": bool(file_w),
         "dir_writable": bool(dir_w),
+    }
+
+
+@router.get("/diagnostics/db-writable")
+def diagnostics_db_writable():
+    return _db_writable_status()
+
+
+@router.get("/product/readiness")
+def product_readiness(
+    window: str = Query(default="7d", pattern="^(24h|7d|30d)$"),
+    db: Session = Depends(get_db),
+):
+    now = datetime.now(timezone.utc)
+    since = now - _parse_window(window)
+
+    blockers: list[str] = []
+    warnings: list[str] = []
+
+    dbw = _db_writable_status()
+    if not dbw.get("is_writable", True):
+        blockers.append("db_readonly")
+
+    last_hb = db.query(BotHeartbeat).order_by(BotHeartbeat.created_at.desc()).first()
+    hb_age = None
+    if last_hb and last_hb.created_at:
+        hb_age = int((now - _as_utc(last_hb.created_at)).total_seconds())
+        if hb_age > 600:
+            blockers.append("heartbeat_stale")
+        elif hb_age > 120:
+            warnings.append("heartbeat_degraded")
+    else:
+        blockers.append("heartbeat_missing")
+
+    errors_1h = (
+        db.query(func.count(ExecutionEvent.id))
+        .filter(ExecutionEvent.created_at >= now - timedelta(hours=1))
+        .filter(ExecutionEvent.status == "error")
+        .scalar()
+    ) or 0
+    if errors_1h > 0:
+        warnings.append("execution_errors_1h")
+
+    raw = db.query(Trade).filter(Trade.executed_at >= since).order_by(Trade.executed_at.asc()).all()
+    orders = _aggregate_trade_fills(raw)
+    closed_positions = _extract_closed_positions(orders)
+    exact_count = sum(1 for cp in closed_positions if cp.get("exit_reason"))
+    coverage = (exact_count / len(closed_positions) * 100) if closed_positions else 0.0
+    if len(closed_positions) > 0 and coverage < 80:
+        warnings.append("exit_exact_coverage_low")
+
+    funding_source = "unavailable"
+    try:
+        start_ms = int(since.timestamp() * 1000)
+        end_ms = int(now.timestamp() * 1000)
+        _ = binance_sync_service.fetch_funding_fees_sum(start_time_ms=start_ms, end_time_ms=end_ms, max_pages=5)
+        funding_source = "exact_window"
+    except Exception:
+        funding_source = "unavailable"
+        warnings.append("funding_unavailable")
+
+    status_value = "READY"
+    if blockers:
+        status_value = "ISSUES"
+    elif warnings:
+        status_value = "DEGRADED"
+
+    return {
+        "status": status_value,
+        "window": window,
+        "blockers": blockers,
+        "warnings": warnings,
+        "db_writable": dbw,
+        "heartbeat_age_sec": hb_age,
+        "execution_errors_1h": int(errors_1h),
+        "exit_exact_coverage_pct": round(coverage, 2),
+        "funding_source": funding_source,
     }
 
 

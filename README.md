@@ -21,6 +21,7 @@ Base URL: `http://localhost:8000/api/v1`
 - `GET /analytics/closed-positions?window=24h|7d|30d&limit=100&offset=0` (derived closed-position ledger)
 - `GET /diagnostics/connectors` (db status/latency, binance mode, last sync, security mode)
 - `GET /diagnostics/db-writable` (sqlite writability check: file/dir permissions)
+- `GET /product/readiness?window=24h|7d|30d` (global readiness status: db/heartbeat/execution/exit coverage/funding)
 - `GET /health/runtime` (bot status, heartbeat age/source/status, open positions, open uPnL, API errors 24h)
 - `POST /health/heartbeat` (optional bot-native heartbeat ingestion)
 - `GET /execution/summary?window=24h|7d|30d` (events count, errors, errors_1h, missed-like, avg latency, p50, p95)

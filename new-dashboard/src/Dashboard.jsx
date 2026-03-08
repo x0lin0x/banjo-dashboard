@@ -150,9 +150,10 @@ function Dashboard() {
       fetch(`${API_URL}/diagnostics/db-writable`).then((r) => r.json()),
       fetch(`${API_URL}/execution/summary?window=${windowFilter}`).then((r) => r.json()),
       fetch(`${API_URL}/funding/trend?window=${windowFilter}`).then((r) => r.json()),
+      fetch(`${API_URL}/product/readiness?window=${windowFilter}`).then((r) => r.json()),
       fetch(`${API_URL}/audit/summary?window=${windowFilter}`).then((r) => r.json())
     ])
-      .then(([overview, riskRes, equityRes, positionsRes, diagRes, runtimeRes, dbWritableRes, execRes, fundingTrendRes, auditRes]) => {
+      .then(([overview, riskRes, equityRes, positionsRes, diagRes, runtimeRes, dbWritableRes, execRes, fundingTrendRes, readinessRes, auditRes]) => {
         setStats(overview)
         setRisk(riskRes)
         setEquity(equityRes?.points || [])
@@ -163,6 +164,7 @@ function Dashboard() {
         setExecSummary(execRes)
         setFundingTrend(fundingTrendRes?.points || [])
         setFundingTrendSource(fundingTrendRes?.source || 'unavailable')
+        setProductReadiness(readinessRes)
         setAudit(auditRes)
       })
       .catch(() => {
@@ -176,6 +178,7 @@ function Dashboard() {
         setExecSummary(null)
         setFundingTrend([])
         setFundingTrendSource('unavailable')
+        setProductReadiness(null)
         setAudit(null)
       })
   }
