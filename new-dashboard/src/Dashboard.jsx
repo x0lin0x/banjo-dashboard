@@ -628,6 +628,15 @@ function Dashboard() {
                 <span style={{ color: '#ff6b6b' }}><strong>DB writable:</strong> NO (file/dir permissions)</span>
               )}
             </div>
+            {dbWritable?.is_writable === false && (
+              <div style={{ marginTop: 10, padding: 10, border: '1px solid #ff6b6b', borderRadius: 8, background: '#2b1212', color: '#ffdede', fontSize: 13 }}>
+                <div style={{ marginBottom: 6 }}><strong>Quick fix hint</strong></div>
+                <div style={{ marginBottom: 6 }}>DB path: <code>{dbWritable?.path || 'unknown'}</code></div>
+                <div style={{ marginBottom: 4 }}><code>{`chmod u+rw "${dbWritable?.path || './backend/trading.db'}"`}</code></div>
+                <div style={{ marginBottom: 4 }}><code>{`chmod u+rwx "${dbWritable?.path ? dbWritable.path.replace(/\/[^\/]+$/, '') : '.'}"`}</code></div>
+                <div><code>{`sudo chown $USER:$USER "${dbWritable?.path || './backend/trading.db'}"`}</code></div>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 10, color: '#b7bbd8' }}>
               <span>Data quality:</span>
               <span>R loss <strong>{stats?.data_quality?.avg_r_loss || 'n/a'}</strong></span>
