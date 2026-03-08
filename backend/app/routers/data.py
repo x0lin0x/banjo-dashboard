@@ -463,6 +463,7 @@ def get_stats_overview(
     max_drawdown_pct = max(0.0, min(max_drawdown_pct, 100.0))
     current_drawdown_pct = ((peak_wallet - running_wallet) / peak_wallet * 100) if peak_wallet > 0 else 0.0
     current_drawdown_pct = max(0.0, min(current_drawdown_pct, 100.0))
+    current_dd_duration_hours = max(0.0, (now_utc - peak_ts).total_seconds() / 3600) if current_drawdown_pct > 0 else 0.0
 
     # Closed-position split metrics (window)
     closed_long = [cp for cp in closed_positions if cp.get("direction") == "LONG"]
@@ -482,6 +483,14 @@ def get_stats_overview(
                 max_consecutive_losses = streak
         else:
             streak = 0
+
+    # current streak = trailing losses from newest closed positions backward
+    current_loss_streak = 0
+    for p in reversed(closed_pnls):
+        if p < 0:
+            current_loss_streak += 1
+        else:
+            break
 
     gross_profit = sum(wins)
     gross_loss_abs = abs(sum(losses))
@@ -638,6 +647,13 @@ def get_stats_overview(
         funding_fees_cumulative = None
         funding_fees_source = "unavailable"
 
+    data_quality = {
+        "avg_r_loss": "snapshots" if losing_rs_pct_verified else "proxy",
+        "avg_r_by_trade": "snapshots" if all_r_signed_verified else "proxy",
+        "exit_distribution": exit_reason_source,
+        "funding_fees": funding_fees_source,
+    }
+
     return {
         "total_trades": total_trades,
         "total_closed_trades": total_closed_trades,
@@ -658,8 +674,10 @@ def get_stats_overview(
         "margin_used_positions": round(margin_used_positions, 8),
         "max_drawdown_pct": round(max_drawdown_pct, 2),
         "current_drawdown_pct": round(current_drawdown_pct, 2),
+        "current_dd_duration_hours": round(current_dd_duration_hours, 2),
         "max_dd_duration_hours": round(max_dd_duration_hours, 2),
         "max_consecutive_losses": int(max_consecutive_losses),
+        "current_loss_streak": int(current_loss_streak),
         "last_ath_balance": round(ath_balance_display, 8),
         "hours_since_last_ath": round(hours_since_ath, 2),
         "avg_r_loss_pct": round(avg_r_loss_pct, 4),
@@ -687,6 +705,7 @@ def get_stats_overview(
         "exit_tp_like_count": int(exit_tp_like),
         "exit_sl_like_count": int(exit_sl_like),
         "exit_other_count": int(exit_other),
+        "data_quality": data_quality,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
