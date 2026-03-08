@@ -79,6 +79,7 @@ function Dashboard() {
   const [positions, setPositions] = useState([])
   const [diag, setDiag] = useState(null)
   const [runtimeHealth, setRuntimeHealth] = useState(null)
+  const [execSummary, setExecSummary] = useState(null)
   const [audit, setAudit] = useState(null)
   const [auditTradesMeta, setAuditTradesMeta] = useState({ total: 0, limit: 25, offset: 0, checksum: '' })
   const [syncEvents, setSyncEvents] = useState([])
@@ -112,15 +113,17 @@ function Dashboard() {
       fetch(`${API_URL}/positions`).then((r) => r.json()),
       fetch(`${API_URL}/diagnostics/connectors`).then((r) => r.json()),
       fetch(`${API_URL}/health/runtime`).then((r) => r.json()),
+      fetch(`${API_URL}/execution/summary?window=${windowFilter}`).then((r) => r.json()),
       fetch(`${API_URL}/audit/summary?window=${windowFilter}`).then((r) => r.json())
     ])
-      .then(([overview, riskRes, equityRes, positionsRes, diagRes, runtimeRes, auditRes]) => {
+      .then(([overview, riskRes, equityRes, positionsRes, diagRes, runtimeRes, execRes, auditRes]) => {
         setStats(overview)
         setRisk(riskRes)
         setEquity(equityRes?.points || [])
         setPositions(positionsRes?.positions || [])
         setDiag(diagRes)
         setRuntimeHealth(runtimeRes)
+        setExecSummary(execRes)
         setAudit(auditRes)
       })
       .catch(() => {
@@ -130,6 +133,7 @@ function Dashboard() {
         setPositions([])
         setDiag(null)
         setRuntimeHealth(null)
+        setExecSummary(null)
         setAudit(null)
       })
   }
@@ -429,6 +433,13 @@ function Dashboard() {
         <Card label='API ERRORS (24h)' value={runtimeHealth?.api_errors_24h ?? 0} color={Number(runtimeHealth?.api_errors_24h ?? 0) > 0 ? '#ff6b6b' : '#39ff14'} />
       </div>
 
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
+        <Card label='EXEC EVENTS' value={execSummary?.total_events ?? 0} color='#8ab4ff' />
+        <Card label='MISSED (window)' value={execSummary?.missed ?? 0} color='#ffd166' />
+        <Card label='EXEC ERRORS (window)' value={execSummary?.errors ?? 0} color={Number(execSummary?.errors ?? 0) > 0 ? '#ff6b6b' : '#39ff14'} />
+        <Card label='AVG EXEC LATENCY' value={execSummary?.avg_latency_ms == null ? 'n/a' : `${Number(execSummary.avg_latency_ms).toFixed(0)}ms`} color='#c8c8ff' />
+      </div>
+
       <div style={panelStyle()}>
         <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Runtime diagnostics</h3>
         <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', color: '#cfd3ff' }}>
@@ -447,7 +458,7 @@ function Dashboard() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
-        <Card label='BALANCE (incl. margin)' value={stats?.account_balance == null ? 'n/a' : `$${Number(stats.account_balance).toFixed(2)}`} color='#8ab4ff' />
+        <Card label='BALANCE (wallet)' value={stats?.account_balance_wallet == null ? 'n/a' : `$${Number(stats.account_balance_wallet).toFixed(2)}`} color='#8ab4ff' />
         <Card label='MAX DD (window)' value={`${stats?.max_drawdown_pct ?? 0}%`} color={ddColor} />
         <Card label='LAST ATH (proxy)' value={stats?.last_ath_balance == null ? 'n/a' : `$${Number(stats.last_ath_balance).toFixed(2)}`} color='#ffd166' />
         <Card label='HOURS SINCE ATH' value={`${Number(stats?.hours_since_last_ath ?? 0).toFixed(1)}h`} color='#c8c8ff' />
