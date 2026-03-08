@@ -604,13 +604,18 @@ function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
         <Card label='TRADING FEES (window)' value={`$${Number(stats?.total_fees_window ?? 0).toFixed(2)}`} color='#ff9f9f' />
         <Card label='FUNDING FEES (window)' value={stats?.funding_fees_cumulative == null ? 'n/a' : `$${Number(stats?.funding_fees_cumulative).toFixed(2)}`} color='#c8c8ff' />
-        <Card label='FUNDING SOURCE' value={`${stats?.funding_fees_source || 'n/a'}`} color='#8ab4ff' />
-        <Card label='HOURS SINCE ATH' value={`${Number(stats?.hours_since_last_ath ?? 0).toFixed(1)}h`} color='#c8c8ff' />
+        <Card label='FEE DRAG %' value={stats?.fee_drag_pct == null ? 'n/a' : `${Number(stats.fee_drag_pct).toFixed(2)}%`} color='#ff9f9f' />
+        <Card label='FUNDING SHARE %' value={stats?.funding_share_pct == null ? 'n/a' : `${Number(stats.funding_share_pct).toFixed(2)}%`} color='#8ab4ff' />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
+        <Card label='FUNDING SOURCE' value={`${stats?.funding_fees_source || 'n/a'}`} color='#8ab4ff' />
+        <Card label='HOURS SINCE ATH' value={`${Number(stats?.hours_since_last_ath ?? 0).toFixed(1)}h`} color='#c8c8ff' />
         <Card label='BALANCE (wallet)' value={stats?.account_balance_wallet == null ? 'n/a' : `$${Number(stats.account_balance_wallet).toFixed(2)}`} color='#8ab4ff' />
         <Card label='AVAILABLE (est.)' value={stats?.account_available_est == null ? 'n/a' : `$${Number(stats.account_available_est).toFixed(2)}`} color='#7ce0ff' />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 18, marginTop: 18 }}>
         <Card label='MARGIN USED' value={`$${Number(stats?.margin_used_positions ?? 0).toFixed(2)}`} color='#ffd166' />
         <Card label='MAX DD (window)' value={`${stats?.max_drawdown_pct ?? 0}%`} color={ddColor} />
       </div>

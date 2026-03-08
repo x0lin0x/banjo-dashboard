@@ -649,6 +649,14 @@ def get_stats_overview(
         funding_fees_cumulative = None
         funding_fees_source = "unavailable"
 
+    funding_abs = abs(float(funding_fees_cumulative or 0.0))
+    trading_fees_abs = abs(float(total_fees_window or 0.0))
+    total_cost_abs = funding_abs + trading_fees_abs
+    gross_profit_abs = abs(float(gross_profit or 0.0))
+
+    fee_drag_pct = (total_cost_abs / gross_profit_abs * 100) if gross_profit_abs > 0 else None
+    funding_share_pct = (funding_abs / total_cost_abs * 100) if total_cost_abs > 0 else None
+
     data_quality = {
         "avg_r_loss": "snapshots" if losing_rs_pct_verified else "proxy",
         "avg_r_by_trade": "snapshots" if all_r_signed_verified else "proxy",
@@ -666,6 +674,8 @@ def get_stats_overview(
         "total_fees_window": round(total_fees_window, 8),
         "funding_fees_cumulative": round(funding_fees_cumulative, 8) if funding_fees_cumulative is not None else None,
         "funding_fees_source": funding_fees_source,
+        "fee_drag_pct": round(fee_drag_pct, 4) if fee_drag_pct is not None else None,
+        "funding_share_pct": round(funding_share_pct, 4) if funding_share_pct is not None else None,
         "profit_factor": round(profit_factor, 4) if profit_factor is not None else None,
         "expectancy": round(expectancy, 8),
         "avg_win_loss_ratio": round(avg_win_loss_ratio, 4) if avg_win_loss_ratio is not None else None,
