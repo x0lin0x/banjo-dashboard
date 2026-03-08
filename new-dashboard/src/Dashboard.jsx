@@ -112,6 +112,7 @@ function Dashboard() {
   const [syncError, setSyncError] = useState('')
   const [syncErrorStreak, setSyncErrorStreak] = useState(0)
   const [autoSyncCooldownUntil, setAutoSyncCooldownUntil] = useState(null)
+  const [heartbeatTestMsg, setHeartbeatTestMsg] = useState('')
 
   const [windowFilter, setWindowFilter] = useState(saved.windowFilter || '30d')
   const [refreshSec, setRefreshSec] = useState(saved.refreshSec || 'off')
@@ -220,6 +221,30 @@ function Dashboard() {
       .catch(() => {
         setExecErrorsSeries([])
       })
+  }
+
+  const testBotHeartbeat = async () => {
+    setHeartbeatTestMsg('')
+    try {
+      const headers = { 'Content-Type': 'application/json' }
+      if (syncToken.trim()) headers['X-API-Token'] = syncToken.trim()
+
+      const res = await fetch(`${API_URL}/health/heartbeat`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ source: 'dashboard-test', status: 'ok', note: 'manual ui heartbeat test' })
+      })
+
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}))
+        throw new Error(payload?.detail || `Heartbeat test failed (${res.status})`)
+      }
+
+      setHeartbeatTestMsg('Heartbeat test OK')
+      loadBase()
+    } catch (err) {
+      setHeartbeatTestMsg(`Heartbeat test failed: ${err?.message || 'unknown error'}`)
+    }
   }
 
   const loadSyncEvents = () => {
@@ -663,6 +688,12 @@ function Dashboard() {
             </div>
             <div style={{ marginTop: 8, color: '#b7bbd8', fontSize: 13 }}>
               Integration mode: <strong>{Number(stats?.exit_exact_coverage_pct ?? 0) > 0 ? 'API + Bot events (partial exact)' : 'API-only'}</strong>
+            </div>
+            <div style={{ marginTop: 8, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button onClick={testBotHeartbeat} style={{ background: '#8ab4ff', color: '#000', border: 'none', borderRadius: 8, padding: '6px 10px', fontWeight: 700 }}>
+                Test bot heartbeat
+              </button>
+              {heartbeatTestMsg && <span style={{ color: heartbeatTestMsg.includes('OK') ? '#39ff14' : '#ff6b6b', fontSize: 13 }}>{heartbeatTestMsg}</span>}
             </div>
           </div>
         </>
