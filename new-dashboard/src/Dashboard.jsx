@@ -514,7 +514,7 @@ function Dashboard() {
               style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '8px 10px' }}
             />
           )}
-          <button onClick={syncNow} disabled={syncing || (diag ? !diag?.sync?.can_sync : false)} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700, opacity: syncing || (diag ? !diag?.sync?.can_sync : false) ? 0.5 : 1 }}>
+          <button onClick={syncNow} disabled={syncing || (diag ? !diag?.sync?.can_sync : false) || (dbWritable?.is_writable === false)} style={{ background: '#00f3ff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700, opacity: syncing || (diag ? !diag?.sync?.can_sync : false) || (dbWritable?.is_writable === false) ? 0.5 : 1 }}>
             {syncing ? 'Syncing...' : 'Sync now'}
           </button>
           <button onClick={resetUiSettings} style={{ background: '#2d2d45', color: '#fff', border: '1px solid #444466', borderRadius: 8, padding: '8px 12px', fontWeight: 700 }}>
@@ -574,7 +574,7 @@ function Dashboard() {
         </div>
       )}
 
-      {((diag && !diag?.sync?.can_sync) || syncError) && (
+      {((diag && !diag?.sync?.can_sync) || (dbWritable?.is_writable === false) || syncError) && (
         <div style={{ ...panelStyle(), border: '1px solid #ff6b6b' }}>
           {(diag && !diag?.sync?.can_sync) && (
             <div>
@@ -584,6 +584,11 @@ function Dashboard() {
                 : diag?.sync?.can_sync_reason === 'role_viewer'
                   ? 'current role is viewer (APP_ROLE=viewer).'
                   : 'role/mode does not allow operator actions.'}
+            </div>
+          )}
+          {dbWritable?.is_writable === false && (
+            <div>
+              <strong style={{ color: '#ff6b6b' }}>Sync disabled:</strong> database is readonly. Fix file/directory permissions first.
             </div>
           )}
           {syncError && (
