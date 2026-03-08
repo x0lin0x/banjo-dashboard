@@ -91,6 +91,15 @@ curl -X POST "http://localhost:8000/api/v1/health/heartbeat" \
   -d '{"source":"bot-runtime","status":"ok","latency_ms":42}'
 ```
 
+## Error codes
+
+Typical responses:
+- `200` success
+- `401` missing/invalid token
+- `403` role/read-only policy blocks sync-protected endpoints
+- `503` backend temporarily unavailable (e.g., readonly DB protection)
+- `500` unexpected server-side commit/storage error
+
 ## Recommendation
 
 Emit one event at least for:

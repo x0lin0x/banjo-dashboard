@@ -114,6 +114,8 @@ function Dashboard() {
   const [autoSyncCooldownUntil, setAutoSyncCooldownUntil] = useState(null)
   const [heartbeatTestMsg, setHeartbeatTestMsg] = useState('')
   const [execIngestTestMsg, setExecIngestTestMsg] = useState('')
+  const [integrationStatus, setIntegrationStatus] = useState({ heartbeatOk: null, executionOk: null, lastTestAt: null })
+  const [fundingChartType, setFundingChartType] = useState('line')
 
   const [windowFilter, setWindowFilter] = useState(saved.windowFilter || '30d')
   const [refreshSec, setRefreshSec] = useState(saved.refreshSec || 'off')
@@ -242,9 +244,11 @@ function Dashboard() {
       }
 
       setHeartbeatTestMsg('Heartbeat test OK')
+      setIntegrationStatus((p) => ({ ...p, heartbeatOk: true, lastTestAt: new Date().toISOString() }))
       loadBase()
     } catch (err) {
       setHeartbeatTestMsg(`Heartbeat test failed: ${err?.message || 'unknown error'}`)
+      setIntegrationStatus((p) => ({ ...p, heartbeatOk: false, lastTestAt: new Date().toISOString() }))
     }
   }
 
@@ -272,9 +276,11 @@ function Dashboard() {
       }
 
       setExecIngestTestMsg('Execution ingest test OK')
+      setIntegrationStatus((p) => ({ ...p, executionOk: true, lastTestAt: new Date().toISOString() }))
       loadExecutionEvents()
     } catch (err) {
       setExecIngestTestMsg(`Execution ingest test failed: ${err?.message || 'unknown error'}`)
+      setIntegrationStatus((p) => ({ ...p, executionOk: false, lastTestAt: new Date().toISOString() }))
     }
   }
 
@@ -493,10 +499,12 @@ function Dashboard() {
       showSections,
       defaultPreset,
       quickMode,
-      opsIncidentLog
+      opsIncidentLog,
+      integrationStatus,
+      fundingChartType
     }
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(payload))
-  }, [windowFilter, refreshSec, alertThresholds, symbolFilter, tradeLimit, tradeSortBy, tradeSortDir, positionSideFilter, positionSortBy, positionSortDir, syncToken, autoSyncSec, showSections, defaultPreset, quickMode, opsIncidentLog])
+  }, [windowFilter, refreshSec, alertThresholds, symbolFilter, tradeLimit, tradeSortBy, tradeSortDir, positionSideFilter, positionSortBy, positionSortDir, syncToken, autoSyncSec, showSections, defaultPreset, quickMode, opsIncidentLog, integrationStatus, fundingChartType])
 
   const resetUiSettings = () => {
     localStorage.removeItem(SETTINGS_KEY)
@@ -519,6 +527,8 @@ function Dashboard() {
     setOpsAlert(null)
     setOpsAlertAck(false)
     setOpsIncidentLog([])
+    setIntegrationStatus({ heartbeatOk: null, executionOk: null, lastTestAt: null })
+    setFundingChartType('line')
   }
 
   useEffect(() => {
@@ -730,6 +740,12 @@ function Dashboard() {
               {heartbeatTestMsg && <span style={{ color: heartbeatTestMsg.includes('OK') ? '#39ff14' : '#ff6b6b', fontSize: 13 }}>{heartbeatTestMsg}</span>}
               {execIngestTestMsg && <span style={{ color: execIngestTestMsg.includes('OK') ? '#39ff14' : '#ff6b6b', fontSize: 13 }}>{execIngestTestMsg}</span>}
             </div>
+            <div style={{ marginTop: 8, display: 'flex', gap: 16, flexWrap: 'wrap', color: '#b7bbd8', fontSize: 13 }}>
+              <span>Integration status:</span>
+              <span>Heartbeat <strong style={{ color: integrationStatus.heartbeatOk == null ? '#c8c8ff' : (integrationStatus.heartbeatOk ? '#39ff14' : '#ff6b6b') }}>{integrationStatus.heartbeatOk == null ? 'n/a' : (integrationStatus.heartbeatOk ? 'OK' : 'FAIL')}</strong></span>
+              <span>Execution ingest <strong style={{ color: integrationStatus.executionOk == null ? '#c8c8ff' : (integrationStatus.executionOk ? '#39ff14' : '#ff6b6b') }}>{integrationStatus.executionOk == null ? 'n/a' : (integrationStatus.executionOk ? 'OK' : 'FAIL')}</strong></span>
+              <span>Last test <strong>{integrationStatus.lastTestAt ? new Date(integrationStatus.lastTestAt).toLocaleTimeString() : 'n/a'}</strong></span>
+            </div>
           </div>
         </>
       )}
@@ -903,16 +919,36 @@ function Dashboard() {
       </div>
 
       <div style={panelStyle()}>
-        <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Funding trend ({windowFilter})</h3>
-        <div style={{ color: '#8b8ba7', fontSize: 12, marginBottom: 8 }}>Source: {fundingTrendSource}</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <h3 style={{ marginTop: 0, color: '#c8c8ff', marginBottom: 0 }}>Funding trend ({windowFilter})</h3>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ color: '#b7bbd8', fontSize: 13 }}>Chart</span>
+            <select value={fundingChartType} onChange={(e) => setFundingChartType(e.target.value)} style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '6px 8px' }}>
+              <option value='line'>Line</option>
+              <option value='bar'>Bar</option>
+            </select>
+          </div>
+        </div>
+        <div style={{ color: '#8b8ba7', fontSize: 12, marginBottom: 8 }}>
+          Source: {fundingTrendSource} · Window total: ${Number((fundingTrend || []).reduce((acc, p) => acc + Number(p?.funding_fee || 0), 0)).toFixed(4)}
+        </div>
         <div style={{ width: '100%', height: 180 }}>
           <ResponsiveContainer>
-            <LineChart data={fundingTrend}>
-              <XAxis dataKey='day' tick={{ fill: '#888', fontSize: 11 }} />
-              <YAxis tick={{ fill: '#888' }} />
-              <Tooltip />
-              <Line type='monotone' dataKey='funding_fee' stroke='#8ab4ff' dot={false} />
-            </LineChart>
+            {fundingChartType === 'bar' ? (
+              <BarChart data={fundingTrend}>
+                <XAxis dataKey='day' tick={{ fill: '#888', fontSize: 11 }} />
+                <YAxis tick={{ fill: '#888' }} />
+                <Tooltip />
+                <Bar dataKey='funding_fee' fill='#8ab4ff' maxBarSize={28} />
+              </BarChart>
+            ) : (
+              <LineChart data={fundingTrend}>
+                <XAxis dataKey='day' tick={{ fill: '#888', fontSize: 11 }} />
+                <YAxis tick={{ fill: '#888' }} />
+                <Tooltip />
+                <Line type='monotone' dataKey='funding_fee' stroke='#8ab4ff' dot={false} />
+              </LineChart>
+            )}
           </ResponsiveContainer>
         </div>
       </div>
