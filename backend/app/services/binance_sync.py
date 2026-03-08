@@ -69,8 +69,10 @@ class BinanceSyncService:
         for row in rows:
             if str(row.get("asset", "")).upper() != wanted:
                 continue
-            # crossWalletBalance is the futures wallet balance for this asset.
-            value = Decimal(str(row.get("crossWalletBalance", row.get("balance", "0"))))
+            # Prefer `balance` to match Binance UI wallet display,
+            # fallback to crossWalletBalance if needed.
+            raw = row.get("balance", row.get("crossWalletBalance", "0"))
+            value = Decimal(str(raw))
             break
 
         self._balance_cache[wanted] = (now, value)
