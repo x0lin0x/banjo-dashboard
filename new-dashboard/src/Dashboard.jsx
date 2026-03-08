@@ -639,6 +639,8 @@ function Dashboard() {
               <span>DB latency: <strong>{diag?.db?.latency_ms ?? 'n/a'} ms</strong></span>
               <span>Server time: <strong>{diag?.sync?.server_time ? new Date(diag.sync.server_time).toLocaleString() : 'n/a'}</strong></span>
               <span>Min sync interval: <strong>{diag?.sync?.min_interval_seconds ?? 'n/a'}s</strong></span>
+              <span>Heartbeat source: <strong>{runtimeHealth?.last_heartbeat_source || 'n/a'}</strong></span>
+              <span>Heartbeat status: <strong>{runtimeHealth?.last_heartbeat_status || 'n/a'}</strong></span>
               {dbWritable?.is_writable === false && (
                 <span style={{ color: '#ff6b6b' }}><strong>DB writable:</strong> NO (file/dir permissions)</span>
               )}

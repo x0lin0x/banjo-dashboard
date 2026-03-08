@@ -41,6 +41,13 @@ class ExecutionEventIn(BaseModel):
     binance_trade_id: str | None = None
 
 
+class HeartbeatIn(BaseModel):
+    source: str = "bot-runtime"
+    status: str = "ok"
+    latency_ms: int | None = None
+    note: str | None = None
+
+
 def _parse_window(window: str) -> timedelta:
     mapping = {"24h": timedelta(hours=24), "7d": timedelta(days=7), "30d": timedelta(days=30)}
     return mapping.get(window, timedelta(days=30))
@@ -186,6 +193,29 @@ def _extract_closed_positions(orders: list[dict]) -> list[dict]:
     return closed
 
 
+@router.post("/health/heartbeat")
+def health_heartbeat(
+    payload: HeartbeatIn,
+    _: None = Depends(require_sync_access),
+    db: Session = Depends(get_db),
+):
+    hb = BotHeartbeat(
+        source=payload.source or "bot-runtime",
+        status=payload.status or "ok",
+        latency_ms=payload.latency_ms,
+        note=payload.note,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(hb)
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"heartbeat_commit_failed: {exc}")
+
+    return {"status": "ok", "source": hb.source, "heartbeat_status": hb.status}
+
+
 @router.get("/health/runtime")
 def health_runtime(db: Session = Depends(get_db)):
     now = datetime.now(timezone.utc)
@@ -225,6 +255,8 @@ def health_runtime(db: Session = Depends(get_db)):
         "bot_status": bot_status,
         "heartbeat_age_sec": heartbeat_age_sec,
         "last_heartbeat_at": hb_ts.isoformat() if hb_ts else None,
+        "last_heartbeat_source": last_hb.source if last_hb else None,
+        "last_heartbeat_status": last_hb.status if last_hb else None,
         "open_positions_count": len(active_positions),
         "open_unrealized_pnl": round(open_unrealized_pnl, 8),
         "last_sync_at": _as_utc(last_sync).isoformat() if last_sync else None,

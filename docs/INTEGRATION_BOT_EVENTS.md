@@ -4,9 +4,10 @@ This integration is optional. The dashboard works without it (API-only mode).
 
 When enabled, bot events improve analytics precision (exit reasons, latency, missed/reject telemetry).
 
-## Endpoint
+## Endpoints
 
-`POST /api/v1/execution/events`
+- `POST /api/v1/execution/events`
+- `POST /api/v1/health/heartbeat`
 
 Headers:
 - `X-API-Token: <SYNC_API_TOKEN>`
@@ -70,6 +71,26 @@ curl -X POST "http://localhost:8000/api/v1/execution/events" \
   }'
 ```
 
+## Heartbeat payload example
+
+```json
+{
+  "source": "bot-runtime",
+  "status": "ok",
+  "latency_ms": 42,
+  "note": "main loop alive"
+}
+```
+
+curl:
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/health/heartbeat" \
+  -H "X-API-Token: your-token" \
+  -H "Content-Type: application/json" \
+  -d '{"source":"bot-runtime","status":"ok","latency_ms":42}'
+```
+
 ## Recommendation
 
 Emit one event at least for:
@@ -77,5 +98,6 @@ Emit one event at least for:
 - order accepted/rejected
 - position closed (with exit_reason)
 - api error/missed execution
+- periodic heartbeat (30-60s)
 
 This gives the best exact coverage while keeping API-only mode available for all users.
