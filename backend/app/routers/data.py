@@ -583,27 +583,28 @@ def get_stats_overview(
 
     # Exit reason distribution:
     # exact when explicit exit_reason exists on closed positions, else proxy by pnl sign.
-    explicit_reasons = [str(cp.get("exit_reason") or "").strip().lower() for cp in closed_positions if cp.get("exit_reason")]
+    def _bucket(reason: str) -> str:
+        r = str(reason or "").strip().lower()
+        if r in {"tp", "take_profit", "takeprofit"}:
+            return "tp"
+        if r in {"sl", "stop_loss", "stoploss"}:
+            return "sl"
+        if r in {"manual", "manual_close", "user_close"}:
+            return "manual"
+        if r in {"opposite", "reverse", "flip"}:
+            return "opposite"
+        if r in {"timeout", "time", "expiry"}:
+            return "timeout"
+        return "other"
+
+    explicit_reasons = [_bucket(cp.get("exit_reason")) for cp in closed_positions if cp.get("exit_reason")]
     exit_exact_count = len(explicit_reasons)
     exit_proxy_count = max(0, len(closed_positions) - exit_exact_count)
     exit_exact_coverage_pct = (exit_exact_count / len(closed_positions) * 100) if closed_positions else 0.0
     has_explicit_exit_reasons = len(explicit_reasons) > 0
 
     if has_explicit_exit_reasons:
-        def _bucket(reason: str) -> str:
-            if reason in {"tp", "take_profit", "takeprofit"}:
-                return "tp"
-            if reason in {"sl", "stop_loss", "stoploss"}:
-                return "sl"
-            if reason in {"manual", "manual_close", "user_close"}:
-                return "manual"
-            if reason in {"opposite", "reverse", "flip"}:
-                return "opposite"
-            if reason in {"timeout", "time", "expiry"}:
-                return "timeout"
-            return "other"
-
-        buckets = [_bucket(r) for r in explicit_reasons]
+        buckets = explicit_reasons
         exit_tp_like = sum(1 for b in buckets if b == "tp")
         exit_sl_like = sum(1 for b in buckets if b == "sl")
         exit_other = sum(1 for b in buckets if b in {"manual", "opposite", "timeout", "other"})

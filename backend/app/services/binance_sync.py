@@ -11,6 +11,26 @@ from app.models.trade import Trade
 logger = logging.getLogger(__name__)
 
 class BinanceSyncService:
+    @staticmethod
+    def _normalize_exit_reason(value: str | None) -> str | None:
+        if value is None:
+            return None
+        raw = str(value).strip().lower()
+        if not raw:
+            return None
+
+        if raw in {"tp", "take_profit", "takeprofit"}:
+            return "tp"
+        if raw in {"sl", "stop_loss", "stoploss"}:
+            return "sl"
+        if raw in {"manual", "manual_close", "user_close"}:
+            return "manual"
+        if raw in {"opposite", "reverse", "flip"}:
+            return "opposite"
+        if raw in {"timeout", "time", "expiry"}:
+            return "timeout"
+        return "other"
+
     def __init__(self, api_key: str, api_secret: str, base_url: str) -> None:
         self.api_key = api_key
         self.api_secret = api_secret
@@ -177,7 +197,7 @@ class BinanceSyncService:
                 realized_pnl=Decimal(str(raw.get("realizedPnl", "0"))),
                 signal_id=str(raw.get("signalId", "")) or None,
                 decision_id=str(raw.get("decisionId", "")) or None,
-                exit_reason=str(raw.get("exitReason", "")) or None,
+                exit_reason=self._normalize_exit_reason(raw.get("exitReason")),
                 executed_at=datetime.fromtimestamp(int(raw.get("time", int(time.time() * 1000))) / 1000, tz=timezone.utc),
             )
             db.add(trade)
