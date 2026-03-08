@@ -87,20 +87,16 @@ class BinanceSyncService:
         raw = row.get("availableBalance", row.get("balance", "0"))
         return Decimal(str(raw))
 
-    def fetch_funding_fees_sum(
+    def _fetch_funding_income_rows(
         self,
         start_time_ms: int | None = None,
         end_time_ms: int | None = None,
         max_pages: int = 5,
-    ) -> Decimal | None:
-        """Return sum of FUNDING_FEE income over range.
-
-        Binance `/fapi/v1/income` is paginated. We cap pages for safety.
-        """
+    ) -> list[dict]:
         if not self.api_key or not self.api_secret:
-            return Decimal("0")
+            return []
 
-        total = Decimal("0")
+        out: list[dict] = []
         page = 1
         current_start = start_time_ms
 
@@ -118,20 +114,48 @@ class BinanceSyncService:
             if not rows:
                 break
 
-            for r in rows:
-                total += Decimal(str(r.get("income", "0")))
+            out.extend(rows)
 
             if len(rows) < 1000:
                 break
 
-            # paginate forward from last row time
             last_time = rows[-1].get("time")
             if not last_time:
                 break
             current_start = int(last_time) + 1
             page += 1
 
+        return out
+
+    def fetch_funding_fees_sum(
+        self,
+        start_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+        max_pages: int = 5,
+    ) -> Decimal | None:
+        """Return sum of FUNDING_FEE income over range."""
+        if not self.api_key or not self.api_secret:
+            return Decimal("0")
+
+        total = Decimal("0")
+        rows = self._fetch_funding_income_rows(start_time_ms=start_time_ms, end_time_ms=end_time_ms, max_pages=max_pages)
+        for r in rows:
+            total += Decimal(str(r.get("income", "0")))
         return total
+
+    def fetch_funding_fees_by_symbol(
+        self,
+        start_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+        max_pages: int = 5,
+    ) -> dict[str, Decimal]:
+        rows = self._fetch_funding_income_rows(start_time_ms=start_time_ms, end_time_ms=end_time_ms, max_pages=max_pages)
+        out: dict[str, Decimal] = {}
+        for r in rows:
+            symbol = str(r.get("symbol", "UNKNOWN") or "UNKNOWN")
+            income = Decimal(str(r.get("income", "0")))
+            out[symbol] = out.get(symbol, Decimal("0")) + income
+        return out
 
     def sync_trades(self, db: Session, symbol: str = "BTCUSDT", limit: int = 100) -> int:
         trades = self.fetch_recent_trades(symbol=symbol, limit=limit)

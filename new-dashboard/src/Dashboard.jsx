@@ -7,7 +7,8 @@ const SETTINGS_KEY = 'banjo-dashboard-settings-v1'
 const DEFAULT_ALERT_THRESHOLDS = {
   ddPct: 20,
   concentrationPct: 35,
-  leverageWeighted: 8
+  leverageWeighted: 8,
+  feeDragPct: 15
 }
 
 function Card({ label, value, color = '#b026ff' }) {
@@ -342,6 +343,9 @@ function Dashboard() {
     if ((risk?.leverage_weighted || 0) > alertThresholds.leverageWeighted) {
       out.push({ level: 'HIGH', msg: `Levier pondéré élevé: ${risk.leverage_weighted}x (> ${alertThresholds.leverageWeighted}x)` })
     }
+    if ((stats?.fee_drag_pct || 0) > alertThresholds.feeDragPct) {
+      out.push({ level: 'MED', msg: `Fee drag élevé: ${Number(stats?.fee_drag_pct || 0).toFixed(2)}% (> ${alertThresholds.feeDragPct}%)` })
+    }
     if (!out.length) out.push({ level: 'OK', msg: 'Aucune alerte critique active' })
     return out
   }, [risk, stats, alertThresholds])
@@ -610,7 +614,7 @@ function Dashboard() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
         <Card label='FUNDING SOURCE' value={`${stats?.funding_fees_source || 'n/a'}`} color='#8ab4ff' />
-        <Card label='HOURS SINCE ATH' value={`${Number(stats?.hours_since_last_ath ?? 0).toFixed(1)}h`} color='#c8c8ff' />
+        <Card label='TOP FUNDING SYMBOL' value={stats?.top_funding_symbol ? `${stats.top_funding_symbol} ($${Number(stats?.top_funding_fee_abs ?? 0).toFixed(2)})` : 'n/a'} color='#c8c8ff' />
         <Card label='BALANCE (wallet)' value={stats?.account_balance_wallet == null ? 'n/a' : `$${Number(stats.account_balance_wallet).toFixed(2)}`} color='#8ab4ff' />
         <Card label='AVAILABLE (est.)' value={stats?.account_available_est == null ? 'n/a' : `$${Number(stats.account_available_est).toFixed(2)}`} color='#7ce0ff' />
       </div>
@@ -655,9 +659,10 @@ function Dashboard() {
             <input type='number' value={alertThresholds.ddPct} onChange={(e) => setAlertThresholds((p) => ({ ...p, ddPct: Number(e.target.value || 0) }))} style={{ width: 80, background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '6px 8px' }} />
             <input type='number' value={alertThresholds.concentrationPct} onChange={(e) => setAlertThresholds((p) => ({ ...p, concentrationPct: Number(e.target.value || 0) }))} style={{ width: 80, background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '6px 8px' }} />
             <input type='number' value={alertThresholds.leverageWeighted} onChange={(e) => setAlertThresholds((p) => ({ ...p, leverageWeighted: Number(e.target.value || 0) }))} style={{ width: 80, background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '6px 8px' }} />
+            <input type='number' value={alertThresholds.feeDragPct} onChange={(e) => setAlertThresholds((p) => ({ ...p, feeDragPct: Number(e.target.value || 0) }))} style={{ width: 80, background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '6px 8px' }} />
           </div>
         </div>
-        <p style={{ color: '#8b8ba7', fontSize: 12, marginTop: 6 }}>Thresholds: DD% / Concentration% / Levier pondéré x</p>
+        <p style={{ color: '#8b8ba7', fontSize: 12, marginTop: 6 }}>Thresholds: DD% / Concentration% / Levier pondéré x / Fee drag %</p>
         <ul style={{ margin: 0, paddingLeft: 18 }}>
           {alerts.map((a, idx) => (
             <li key={idx} style={{ color: a.level === 'OK' ? '#39ff14' : '#ff6b6b', marginBottom: 6 }}>
