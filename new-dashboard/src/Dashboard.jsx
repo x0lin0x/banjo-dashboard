@@ -371,6 +371,9 @@ function Dashboard() {
     if ((stats?.fee_drag_pct || 0) > alertThresholds.feeDragPct) {
       out.push({ level: 'MED', msg: `Fee drag élevé: ${Number(stats?.fee_drag_pct || 0).toFixed(2)}% (> ${alertThresholds.feeDragPct}%)` })
     }
+    if ((stats?.exit_exact_coverage_pct ?? 100) < 80) {
+      out.push({ level: 'MED', msg: `Exit exact coverage faible: ${Number(stats?.exit_exact_coverage_pct ?? 0).toFixed(1)}% (< 80%)` })
+    }
     if (!out.length) out.push({ level: 'OK', msg: 'Aucune alerte critique active' })
     return out
   }, [risk, stats, alertThresholds])
