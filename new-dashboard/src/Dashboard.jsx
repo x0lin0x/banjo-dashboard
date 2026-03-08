@@ -612,6 +612,20 @@ function Dashboard() {
         <Card label='FUNDING SHARE %' value={stats?.funding_share_pct == null ? 'n/a' : `${Number(stats.funding_share_pct).toFixed(2)}%`} color='#8ab4ff' />
       </div>
 
+      <div style={panelStyle()}>
+        <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Cost mix ({windowFilter})</h3>
+        <div style={{ height: 16, width: '100%', background: '#1a1a2e', border: '1px solid #2a2a3f', borderRadius: 999, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', height: '100%' }}>
+            <div style={{ width: `${Number(stats?.funding_share_pct ?? 0)}%`, background: '#8ab4ff' }} />
+            <div style={{ width: `${Number(stats?.trading_fee_share_pct ?? 0)}%`, background: '#ff9f9f' }} />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 16, marginTop: 8, color: '#b7bbd8', fontSize: 13 }}>
+          <span>Funding: <strong>{stats?.funding_share_pct == null ? 'n/a' : `${Number(stats.funding_share_pct).toFixed(2)}%`}</strong></span>
+          <span>Trading fees: <strong>{stats?.trading_fee_share_pct == null ? 'n/a' : `${Number(stats.trading_fee_share_pct).toFixed(2)}%`}</strong></span>
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
         <Card label='FUNDING SOURCE' value={`${stats?.funding_fees_source || 'n/a'}`} color='#8ab4ff' />
         <Card label='TOP FUNDING SYMBOL' value={stats?.top_funding_symbol ? `${stats.top_funding_symbol} ($${Number(stats?.top_funding_fee_abs ?? 0).toFixed(2)})` : 'n/a'} color='#c8c8ff' />
