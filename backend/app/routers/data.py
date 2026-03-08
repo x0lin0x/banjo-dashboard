@@ -24,6 +24,12 @@ def _parse_window(window: str) -> timedelta:
     return mapping.get(window, timedelta(days=30))
 
 
+def _as_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def _aggregate_trade_fills(trades: list[Trade]) -> list[dict]:
     grouped: dict[str, dict] = {}
 
@@ -154,12 +160,11 @@ def get_stats_overview(
 
     all_trades = (
         db.query(Trade)
-        .filter(Trade.executed_at <= now_utc)
         .order_by(Trade.executed_at.asc())
         .all()
     )
 
-    window_trades = [t for t in all_trades if t.executed_at >= since]
+    window_trades = [t for t in all_trades if _as_utc(t.executed_at) >= since]
 
     # Window-aware metrics/counters
     total_realized_pnl = float(sum(float(t.realized_pnl or 0) for t in window_trades))
@@ -168,7 +173,7 @@ def get_stats_overview(
     total_trades = len(aggregated_orders_window)
 
     closed_positions_all = _extract_closed_positions(aggregated_orders_all)
-    closed_positions = [cp for cp in closed_positions_all if cp["closed_at"] >= since]
+    closed_positions = [cp for cp in closed_positions_all if _as_utc(cp["closed_at"]) >= since]
     total_closed_trades = len(closed_positions)
     equity = total_realized_pnl + total_unrealized_pnl
 
@@ -187,9 +192,7 @@ def get_stats_overview(
     close_wallet_by_ts: dict[datetime, float] = {}
     for t in all_trades:
         running_wallet += float(t.realized_pnl or 0)
-        ts = t.executed_at
-        if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
+        ts = _as_utc(t.executed_at)
         close_wallet_by_ts[ts] = running_wallet
 
         if ts >= since:
@@ -215,9 +218,7 @@ def get_stats_overview(
         pnl = float(cp["realized_pnl"])
         if pnl >= 0:
             continue
-        cts = cp["closed_at"]
-        if cts.tzinfo is None:
-            cts = cts.replace(tzinfo=timezone.utc)
+        cts = _as_utc(cp["closed_at"])
         wallet_at_close = float(close_wallet_by_ts.get(cts, current_wallet))
         denom = max(abs(wallet_at_close), 1e-9)
         losing_rs_pct.append(abs(pnl) / denom * 100)
