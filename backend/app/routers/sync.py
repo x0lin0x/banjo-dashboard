@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.account_snapshot import AccountSnapshot
+from app.models.bot_heartbeat import BotHeartbeat
 from app.models.position import Position
 from app.models.sync_event import SyncEvent
 from app.security import require_sync_access
@@ -70,6 +71,17 @@ def _log_sync_event(
     db.commit()
 
 
+def _log_heartbeat(db: Session, status_value: str = "ok", note: str | None = None) -> None:
+    hb = BotHeartbeat(
+        source="dashboard-sync",
+        status=status_value,
+        note=note,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(hb)
+    db.commit()
+
+
 def _snapshot_account_state(db: Session) -> None:
     wallet = binance_sync_service.fetch_account_balance(asset="USDT")
 
@@ -113,9 +125,11 @@ def sync_trades(
         except Exception:
             pass
         _log_sync_event(db, endpoint, actor, "ok", None, symbol.upper(), int((time.time() - started) * 1000))
+        _log_heartbeat(db, status_value="ok")
         return {"status": "ok", "type": "trades", "symbol": symbol.upper(), "inserted": inserted}
     except Exception as exc:
         _log_sync_event(db, endpoint, actor, "error", str(exc)[:240], symbol.upper(), int((time.time() - started) * 1000))
+        _log_heartbeat(db, status_value="error", note=str(exc)[:240])
         raise
 
 
@@ -137,9 +151,11 @@ def sync_positions(
         except Exception:
             pass
         _log_sync_event(db, endpoint, actor, "ok", None, None, int((time.time() - started) * 1000))
+        _log_heartbeat(db, status_value="ok")
         return {"status": "ok", "type": "positions", "updated": updated}
     except Exception as exc:
         _log_sync_event(db, endpoint, actor, "error", str(exc)[:240], None, int((time.time() - started) * 1000))
+        _log_heartbeat(db, status_value="error", note=str(exc)[:240])
         raise
 
 
@@ -164,7 +180,9 @@ def sync_all(
         except Exception:
             pass
         _log_sync_event(db, endpoint, actor, "ok", None, symbol.upper(), int((time.time() - started) * 1000))
+        _log_heartbeat(db, status_value="ok")
         return {"status": "ok", "symbol": symbol.upper(), "trades_inserted": inserted, "positions_updated": updated}
     except Exception as exc:
         _log_sync_event(db, endpoint, actor, "error", str(exc)[:240], symbol.upper(), int((time.time() - started) * 1000))
+        _log_heartbeat(db, status_value="error", note=str(exc)[:240])
         raise

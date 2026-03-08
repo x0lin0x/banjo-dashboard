@@ -78,6 +78,7 @@ function Dashboard() {
   const [trades, setTrades] = useState([])
   const [positions, setPositions] = useState([])
   const [diag, setDiag] = useState(null)
+  const [runtimeHealth, setRuntimeHealth] = useState(null)
   const [audit, setAudit] = useState(null)
   const [auditTradesMeta, setAuditTradesMeta] = useState({ total: 0, limit: 25, offset: 0, checksum: '' })
   const [syncEvents, setSyncEvents] = useState([])
@@ -110,14 +111,16 @@ function Dashboard() {
       fetch(`${API_URL}/stats/equity?window=${windowFilter}`).then((r) => r.json()),
       fetch(`${API_URL}/positions`).then((r) => r.json()),
       fetch(`${API_URL}/diagnostics/connectors`).then((r) => r.json()),
+      fetch(`${API_URL}/health/runtime`).then((r) => r.json()),
       fetch(`${API_URL}/audit/summary?window=${windowFilter}`).then((r) => r.json())
     ])
-      .then(([overview, riskRes, equityRes, positionsRes, diagRes, auditRes]) => {
+      .then(([overview, riskRes, equityRes, positionsRes, diagRes, runtimeRes, auditRes]) => {
         setStats(overview)
         setRisk(riskRes)
         setEquity(equityRes?.points || [])
         setPositions(positionsRes?.positions || [])
         setDiag(diagRes)
+        setRuntimeHealth(runtimeRes)
         setAudit(auditRes)
       })
       .catch(() => {
@@ -126,6 +129,7 @@ function Dashboard() {
         setEquity([])
         setPositions([])
         setDiag(null)
+        setRuntimeHealth(null)
         setAudit(null)
       })
   }
@@ -417,6 +421,13 @@ function Dashboard() {
           )}
         </div>
       )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
+        <Card label='BOT STATUS' value={(runtimeHealth?.bot_status || 'unknown').toUpperCase()} color={runtimeHealth?.bot_status === 'running' ? '#39ff14' : runtimeHealth?.bot_status === 'degraded' ? '#ffd166' : '#ff6b6b'} />
+        <Card label='HB AGE' value={runtimeHealth?.heartbeat_age_sec == null ? 'n/a' : `${runtimeHealth.heartbeat_age_sec}s`} color='#8ab4ff' />
+        <Card label='OPEN POSITIONS' value={runtimeHealth?.open_positions_count ?? 0} color='#b026ff' />
+        <Card label='API ERRORS (24h)' value={runtimeHealth?.api_errors_24h ?? 0} color={Number(runtimeHealth?.api_errors_24h ?? 0) > 0 ? '#ff6b6b' : '#39ff14'} />
+      </div>
 
       <div style={panelStyle()}>
         <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Runtime diagnostics</h3>

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.account_snapshot import AccountSnapshot
+from app.models.bot_heartbeat import BotHeartbeat
 from app.models.position import Position
 from app.models.sync_event import SyncEvent
 from app.models.trade import Trade
@@ -144,6 +145,53 @@ def _extract_closed_positions(orders: list[dict]) -> list[dict]:
         st["net"] = new
 
     return closed
+
+
+@router.get("/health/runtime")
+def health_runtime(db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+
+    last_hb = db.query(BotHeartbeat).order_by(BotHeartbeat.created_at.desc()).first()
+    if last_hb and last_hb.created_at:
+        hb_ts = _as_utc(last_hb.created_at)
+        heartbeat_age_sec = max(0, int((now - hb_ts).total_seconds()))
+    else:
+        hb_ts = None
+        heartbeat_age_sec = None
+
+    if heartbeat_age_sec is None:
+        bot_status = "offline"
+    elif heartbeat_age_sec <= 120:
+        bot_status = "running"
+    elif heartbeat_age_sec <= 600:
+        bot_status = "degraded"
+    else:
+        bot_status = "offline"
+
+    positions = db.query(Position).all()
+    active_positions = [p for p in positions if abs(float(p.position_amt) * float(p.mark_price)) > 0]
+    open_unrealized_pnl = float(sum(float(p.unrealized_pnl or 0) for p in active_positions))
+
+    since = now - timedelta(hours=24)
+    api_errors_24h = (
+        db.query(func.count(SyncEvent.id))
+        .filter(SyncEvent.created_at >= since)
+        .filter(SyncEvent.status == "error")
+        .scalar()
+    ) or 0
+
+    last_sync = db.query(func.max(SyncEvent.created_at)).scalar()
+
+    return {
+        "bot_status": bot_status,
+        "heartbeat_age_sec": heartbeat_age_sec,
+        "last_heartbeat_at": hb_ts.isoformat() if hb_ts else None,
+        "open_positions_count": len(active_positions),
+        "open_unrealized_pnl": round(open_unrealized_pnl, 8),
+        "last_sync_at": _as_utc(last_sync).isoformat() if last_sync else None,
+        "api_errors_24h": int(api_errors_24h),
+        "source": "exact",
+    }
 
 
 @router.get("/stats/overview")
