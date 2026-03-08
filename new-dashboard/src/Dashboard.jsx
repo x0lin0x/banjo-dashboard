@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 const API_URL = 'http://localhost:8000/api/v1'
 const SETTINGS_KEY = 'banjo-dashboard-settings-v1'
@@ -82,6 +82,7 @@ function Dashboard() {
   const [execSummary, setExecSummary] = useState(null)
   const [audit, setAudit] = useState(null)
   const [execEvents, setExecEvents] = useState([])
+  const [execErrorsSeries, setExecErrorsSeries] = useState([])
   const [auditTradesMeta, setAuditTradesMeta] = useState({ total: 0, limit: 25, offset: 0, checksum: '' })
   const [syncEvents, setSyncEvents] = useState([])
   const [syncEventsMeta, setSyncEventsMeta] = useState({ total: 0, limit: 8, offset: 0 })
@@ -173,6 +174,17 @@ function Dashboard() {
       })
   }
 
+  const loadExecutionErrorsSeries = () => {
+    fetch(`${API_URL}/execution/errors-timeseries?window=${windowFilter}`)
+      .then((r) => r.json())
+      .then((res) => {
+        setExecErrorsSeries(res?.points || [])
+      })
+      .catch(() => {
+        setExecErrorsSeries([])
+      })
+  }
+
   const loadSyncEvents = () => {
     const params = new URLSearchParams({
       limit: String(syncEventsMeta.limit),
@@ -239,6 +251,7 @@ function Dashboard() {
       loadAuditTradesMeta()
       loadSyncEvents()
       loadExecutionEvents()
+      loadExecutionErrorsSeries()
     } catch (err) {
       const nextStreak = syncErrorStreak + 1
       setSyncErrorStreak(nextStreak)
@@ -263,6 +276,7 @@ function Dashboard() {
     loadAuditTradesMeta()
     loadSyncEvents()
     loadExecutionEvents()
+    loadExecutionErrorsSeries()
   }, [windowFilter])
 
   useEffect(() => {
@@ -290,6 +304,7 @@ function Dashboard() {
       loadAuditTradesMeta()
       loadSyncEvents()
       loadExecutionEvents()
+      loadExecutionErrorsSeries()
     }, ms)
     return () => clearInterval(id)
   }, [refreshSec, windowFilter, symbolFilter, tradeLimit, tradeOffset, tradeSortBy, tradeSortDir, auditTradesMeta.limit, auditTradesMeta.offset, syncEventsMeta.limit, syncEventsMeta.offset, syncEventsFilterEndpoint, syncEventsFilterStatus])
@@ -464,8 +479,8 @@ function Dashboard() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
         <Card label='EXEC EVENTS' value={execSummary?.total_events ?? 0} color='#8ab4ff' />
-        <Card label='MISSED (window)' value={execSummary?.missed ?? 0} color='#ffd166' />
-        <Card label='EXEC ERRORS (window)' value={execSummary?.errors ?? 0} color={Number(execSummary?.errors ?? 0) > 0 ? '#ff6b6b' : '#39ff14'} />
+        <Card label='MISSED-LIKE (window)' value={execSummary?.missed_like_events ?? 0} color='#ffd166' />
+        <Card label='EXEC ERRORS (window)' value={execSummary?.error_events ?? 0} color={Number(execSummary?.error_events ?? 0) > 0 ? '#ff6b6b' : '#39ff14'} />
         <Card label='AVG EXEC LATENCY' value={execSummary?.avg_latency_ms == null ? 'n/a' : `${Number(execSummary.avg_latency_ms).toFixed(0)}ms`} color='#c8c8ff' />
       </div>
 
@@ -514,6 +529,16 @@ function Dashboard() {
               ))}
             </tbody>
           </table>
+        </div>
+        <div style={{ width: '100%', height: 180, marginTop: 12 }}>
+          <ResponsiveContainer>
+            <BarChart data={execErrorsSeries}>
+              <XAxis dataKey='ts' tick={{ fill: '#888' }} />
+              <YAxis tick={{ fill: '#888' }} />
+              <Tooltip />
+              <Bar dataKey='errors' fill='#ff6b6b' />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
 

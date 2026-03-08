@@ -302,6 +302,30 @@ def execution_summary(
     }
 
 
+@router.get("/execution/errors-timeseries")
+def execution_errors_timeseries(
+    window: str = Query(default="24h", pattern="^(24h|7d|30d)$"),
+    db: Session = Depends(get_db),
+):
+    since = datetime.now(timezone.utc) - _parse_window(window)
+    rows = (
+        db.query(ExecutionEvent)
+        .filter(ExecutionEvent.created_at >= since)
+        .filter(ExecutionEvent.status == "error")
+        .order_by(ExecutionEvent.created_at.asc())
+        .all()
+    )
+
+    buckets: dict[str, int] = defaultdict(int)
+    for r in rows:
+        ts = _as_utc(r.created_at)
+        key = ts.replace(minute=0, second=0, microsecond=0).isoformat()
+        buckets[key] += 1
+
+    points = [{"ts": k, "errors": buckets[k]} for k in sorted(buckets.keys())]
+    return {"window": window, "points": points}
+
+
 @router.get("/execution/events")
 def execution_events(
     limit: int = Query(default=20, ge=1, le=200),
