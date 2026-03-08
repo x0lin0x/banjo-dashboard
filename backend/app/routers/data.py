@@ -169,7 +169,7 @@ def get_stats_overview(
     # Window-aware metrics/counters
     total_realized_pnl = float(sum(float(t.realized_pnl or 0) for t in window_trades))
     aggregated_orders_all = _aggregate_trade_fills(all_trades)
-    aggregated_orders_window = [o for o in aggregated_orders_all if o["executed_at"] >= since]
+    aggregated_orders_window = [o for o in aggregated_orders_all if _as_utc(o["executed_at"]) >= since]
     total_trades = len(aggregated_orders_window)
 
     closed_positions_all = _extract_closed_positions(aggregated_orders_all)
