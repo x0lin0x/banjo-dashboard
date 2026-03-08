@@ -610,9 +610,9 @@ function Dashboard() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
         <Card label='LAST ATH (proxy)' value={stats?.last_ath_balance == null ? 'n/a' : `$${Number(stats.last_ath_balance).toFixed(2)}`} color='#ffd166' />
-        <Card label='GROSS LONG' value={`$${(risk?.gross_long_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#39ff14' />
-        <Card label='GROSS SHORT' value={`$${(risk?.gross_short_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#ff3131' />
         <Card label='AVG R LOSS' value={`${Number(stats?.avg_r_loss_pct ?? 0).toFixed(2)}%`} color='#ff6b6b' />
+        <Card label='AVG R WIN' value={`${Number(stats?.avg_r_win_pct ?? 0).toFixed(2)}%`} color='#39ff14' />
+        <Card label='AVG R BY TRADE' value={`${Number(stats?.avg_r_by_trade_pct ?? 0).toFixed(2)}R`} color={Number(stats?.avg_r_by_trade_pct ?? 0) >= 0 ? '#39ff14' : '#ff6b6b'} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
@@ -656,8 +656,8 @@ function Dashboard() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18, marginTop: 18 }}>
-        <Card label='LONG NOTIONAL' value={`$${positionSummary.longNotional.toFixed(2)}`} color='#39ff14' />
-        <Card label='SHORT NOTIONAL' value={`$${positionSummary.shortNotional.toFixed(2)}`} color='#ff3131' />
+        <Card label='GROSS LONG' value={`$${(risk?.gross_long_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#39ff14' />
+        <Card label='GROSS SHORT' value={`$${(risk?.gross_short_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#ff3131' />
         <Card label='TOP EXPOSURE' value={`${positionSummary.top.symbol} ($${positionSummary.top.notional.toFixed(2)})`} color='#ffd166' />
       </div>
 
