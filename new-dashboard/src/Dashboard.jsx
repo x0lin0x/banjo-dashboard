@@ -619,6 +619,35 @@ function Dashboard() {
         <Card label='AVAILABLE (est.)' value={stats?.account_available_est == null ? 'n/a' : `$${Number(stats.account_available_est).toFixed(2)}`} color='#7ce0ff' />
       </div>
 
+      <div style={panelStyle()}>
+        <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Top funding symbols ({windowFilter})</h3>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ color: '#8b8ba7', textAlign: 'left', borderBottom: '1px solid #2a2a3f' }}>
+                <th style={{ padding: 8 }}>Symbol</th>
+                <th style={{ padding: 8 }}>Funding fee</th>
+                <th style={{ padding: 8 }}>Abs</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(stats?.top_funding_symbols || []).map((row) => (
+                <tr key={row.symbol} style={{ borderBottom: '1px solid #1c1c2b' }}>
+                  <td style={{ padding: 8 }}>{row.symbol}</td>
+                  <td style={{ padding: 8, color: Number(row.funding_fee) <= 0 ? '#ff6b6b' : '#39ff14' }}>${Number(row.funding_fee).toFixed(4)}</td>
+                  <td style={{ padding: 8 }}>${Number(row.funding_fee_abs).toFixed(4)}</td>
+                </tr>
+              ))}
+              {(!stats?.top_funding_symbols || stats.top_funding_symbols.length === 0) && (
+                <tr>
+                  <td style={{ padding: 8, color: '#8b8ba7' }} colSpan={3}>No funding data on selected window.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 18, marginTop: 18 }}>
         <Card label='MARGIN USED' value={`$${Number(stats?.margin_used_positions ?? 0).toFixed(2)}`} color='#ffd166' />
         <Card label='MAX DD (window)' value={`${stats?.max_drawdown_pct ?? 0}%`} color={ddColor} />

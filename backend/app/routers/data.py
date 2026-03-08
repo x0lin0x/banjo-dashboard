@@ -640,6 +640,7 @@ def get_stats_overview(
     funding_fees_source = "unavailable"
     top_funding_symbol = None
     top_funding_fee_abs = None
+    top_funding_symbols: list[dict] = []
     try:
         start_ms = int(since.timestamp() * 1000)
         end_ms = int(now_utc.timestamp() * 1000)
@@ -652,11 +653,18 @@ def get_stats_overview(
             sym, val = max(by_symbol.items(), key=lambda kv: abs(float(kv[1])))
             top_funding_symbol = sym
             top_funding_fee_abs = abs(float(val))
+
+            ranked = sorted(by_symbol.items(), key=lambda kv: abs(float(kv[1])), reverse=True)[:5]
+            top_funding_symbols = [
+                {"symbol": s, "funding_fee": round(float(v), 8), "funding_fee_abs": round(abs(float(v)), 8)}
+                for s, v in ranked
+            ]
     except Exception:
         funding_fees_cumulative = None
         funding_fees_source = "unavailable"
         top_funding_symbol = None
         top_funding_fee_abs = None
+        top_funding_symbols = []
 
     funding_abs = abs(float(funding_fees_cumulative or 0.0))
     trading_fees_abs = abs(float(total_fees_window or 0.0))
@@ -685,6 +693,7 @@ def get_stats_overview(
         "funding_fees_source": funding_fees_source,
         "top_funding_symbol": top_funding_symbol,
         "top_funding_fee_abs": round(top_funding_fee_abs, 8) if top_funding_fee_abs is not None else None,
+        "top_funding_symbols": top_funding_symbols,
         "fee_drag_pct": round(fee_drag_pct, 4) if fee_drag_pct is not None else None,
         "funding_share_pct": round(funding_share_pct, 4) if funding_share_pct is not None else None,
         "profit_factor": round(profit_factor, 4) if profit_factor is not None else None,
