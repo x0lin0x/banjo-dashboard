@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.models.account_snapshot import AccountSnapshot
 from app.models.position import Position
 from app.models.sync_event import SyncEvent
 from app.models.trade import Trade
@@ -211,20 +212,47 @@ def get_stats_overview(
         ath_ts = ath_ts.replace(tzinfo=timezone.utc)
     max_drawdown_pct = max(0.0, min(max_drawdown_pct, 100.0))
 
-    # Average R by CLOSED LOSING POSITION at close time (window filtered, history-based bankroll).
-    losing_rs_pct: list[float] = []
+    # Average R by CLOSED LOSING POSITION at close time.
+    # Preferred source = account snapshots (verified). Fallback = reconstructed wallet curve.
+    snaps = db.query(AccountSnapshot).order_by(AccountSnapshot.created_at.asc()).all()
+    snap_points: list[tuple[datetime, float]] = []
+    for s in snaps:
+        ts = _as_utc(s.created_at)
+        ref = s.equity_total if s.equity_total is not None else s.wallet_balance
+        if ref is None:
+            continue
+        snap_points.append((ts, float(ref)))
+
+    losing_rs_pct_verified: list[float] = []
+    losing_rs_pct_proxy: list[float] = []
     losing_pnls_usd: list[float] = []
+
     for cp in closed_positions:
         pnl = float(cp["realized_pnl"])
         if pnl >= 0:
             continue
+
         cts = _as_utc(cp["closed_at"])
-        wallet_at_close = float(close_wallet_by_ts.get(cts, current_wallet))
-        denom = max(abs(wallet_at_close), 1e-9)
-        losing_rs_pct.append(abs(pnl) / denom * 100)
         losing_pnls_usd.append(abs(pnl))
 
-    avg_r_loss_pct = (sum(losing_rs_pct) / len(losing_rs_pct)) if losing_rs_pct else 0.0
+        # Snapshot lookup: latest snapshot <= close timestamp
+        snap_ref = None
+        for ts, val in snap_points:
+            if ts <= cts:
+                snap_ref = val
+            else:
+                break
+
+        if snap_ref and snap_ref > 0:
+            losing_rs_pct_verified.append(abs(pnl) / snap_ref * 100)
+        else:
+            wallet_at_close = float(close_wallet_by_ts.get(cts, current_wallet))
+            denom = max(abs(wallet_at_close), 1e-9)
+            losing_rs_pct_proxy.append(abs(pnl) / denom * 100)
+
+    avg_r_loss_pct_verified = (sum(losing_rs_pct_verified) / len(losing_rs_pct_verified)) if losing_rs_pct_verified else 0.0
+    avg_r_loss_pct_proxy = (sum(losing_rs_pct_proxy) / len(losing_rs_pct_proxy)) if losing_rs_pct_proxy else 0.0
+    avg_r_loss_pct = avg_r_loss_pct_verified if losing_rs_pct_verified else avg_r_loss_pct_proxy
     avg_r_loss_usd = (sum(losing_pnls_usd) / len(losing_pnls_usd)) if losing_pnls_usd else 0.0
 
     current_balance_ref = float(account_balance_total or account_balance_wallet or 0.0)
@@ -250,9 +278,14 @@ def get_stats_overview(
         "last_ath_balance": round(ath_balance_display, 8),
         "hours_since_last_ath": round(hours_since_ath, 2),
         "avg_r_loss_pct": round(avg_r_loss_pct, 4),
+        "avg_r_loss_pct_verified": round(avg_r_loss_pct_verified, 4),
+        "avg_r_loss_pct_proxy": round(avg_r_loss_pct_proxy, 4),
+        "avg_r_loss_source": "snapshots" if losing_rs_pct_verified else "proxy",
+        "avg_r_loss_verified_samples": len(losing_rs_pct_verified),
+        "avg_r_loss_proxy_samples": len(losing_rs_pct_proxy),
         "avg_r_loss_pct_current_balance": round(avg_r_loss_pct_current_balance, 4),
         "avg_r_loss_usd": round(avg_r_loss_usd, 8),
-        "losing_closed_positions": len(losing_rs_pct),
+        "losing_closed_positions": len(losing_pnls_usd),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
