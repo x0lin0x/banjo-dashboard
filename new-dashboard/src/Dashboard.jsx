@@ -548,10 +548,23 @@ function Dashboard() {
         <div style={{ width: '100%', height: 180, marginTop: 12 }}>
           <ResponsiveContainer>
             <BarChart data={execErrorsSeries}>
-              <XAxis dataKey='ts' tick={{ fill: '#888' }} />
-              <YAxis tick={{ fill: '#888' }} />
-              <Tooltip />
-              <Bar dataKey='errors' fill='#ff6b6b' />
+              <XAxis
+                dataKey='ts'
+                tick={{ fill: '#888', fontSize: 11 }}
+                tickFormatter={(v) => {
+                  const d = new Date(v)
+                  return Number.isNaN(d.getTime()) ? v : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                }}
+                minTickGap={24}
+              />
+              <YAxis tick={{ fill: '#888' }} allowDecimals={false} />
+              <Tooltip
+                labelFormatter={(v) => {
+                  const d = new Date(v)
+                  return Number.isNaN(d.getTime()) ? v : d.toLocaleString()
+                }}
+              />
+              <Bar dataKey='errors' fill='#ff6b6b' maxBarSize={28} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
