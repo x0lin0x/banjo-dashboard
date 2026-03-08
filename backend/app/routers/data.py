@@ -56,6 +56,7 @@ def _aggregate_trade_fills(trades: list[Trade]) -> list[dict]:
                 "signal_id": getattr(t, "signal_id", None),
                 "decision_id": getattr(t, "decision_id", None),
                 "fills_count": 0,
+                "exit_reason": getattr(t, "exit_reason", None),
             }
 
         row = grouped[group_key]
@@ -68,6 +69,8 @@ def _aggregate_trade_fills(trades: list[Trade]) -> list[dict]:
 
         if t.executed_at and t.executed_at < row["executed_at"]:
             row["executed_at"] = t.executed_at
+        if (not row.get("exit_reason")) and getattr(t, "exit_reason", None):
+            row["exit_reason"] = t.exit_reason
 
     out = []
     for row in grouped.values():
@@ -89,6 +92,7 @@ def _aggregate_trade_fills(trades: list[Trade]) -> list[dict]:
                 "signal_id": row["signal_id"],
                 "decision_id": row["decision_id"],
                 "fills_count": row["fills_count"],
+                "exit_reason": row.get("exit_reason"),
             }
         )
 
@@ -131,6 +135,7 @@ def _extract_closed_positions(orders: list[dict]) -> list[dict]:
                     "realized_pnl": st["cycle_pnl"],
                     "direction": "LONG" if prev > 0 else "SHORT",
                     "orders_count": None,
+                    "exit_reason": o.get("exit_reason"),
                 }
             )
             st["cycle_pnl"] = 0.0
@@ -250,10 +255,35 @@ def get_stats_overview(
     avg_holding_seconds = (sum(holding_secs) / len(holding_secs)) if holding_secs else 0.0
     avg_holding_hours = avg_holding_seconds / 3600 if avg_holding_seconds else 0.0
 
-    # Exit reason distribution (proxy until explicit exit_reason is ingested).
-    exit_tp_like = sum(1 for cp in closed_positions if float(cp.get("realized_pnl") or 0) > 0)
-    exit_sl_like = sum(1 for cp in closed_positions if float(cp.get("realized_pnl") or 0) < 0)
-    exit_other = max(0, len(closed_positions) - exit_tp_like - exit_sl_like)
+    # Exit reason distribution:
+    # exact when explicit exit_reason exists on closed positions, else proxy by pnl sign.
+    explicit_reasons = [str(cp.get("exit_reason") or "").strip().lower() for cp in closed_positions if cp.get("exit_reason")]
+    has_explicit_exit_reasons = len(explicit_reasons) > 0
+
+    if has_explicit_exit_reasons:
+        def _bucket(reason: str) -> str:
+            if reason in {"tp", "take_profit", "takeprofit"}:
+                return "tp"
+            if reason in {"sl", "stop_loss", "stoploss"}:
+                return "sl"
+            if reason in {"manual", "manual_close", "user_close"}:
+                return "manual"
+            if reason in {"opposite", "reverse", "flip"}:
+                return "opposite"
+            if reason in {"timeout", "time", "expiry"}:
+                return "timeout"
+            return "other"
+
+        buckets = [_bucket(r) for r in explicit_reasons]
+        exit_tp_like = sum(1 for b in buckets if b == "tp")
+        exit_sl_like = sum(1 for b in buckets if b == "sl")
+        exit_other = sum(1 for b in buckets if b in {"manual", "opposite", "timeout", "other"})
+        exit_reason_source = "exact"
+    else:
+        exit_tp_like = sum(1 for cp in closed_positions if float(cp.get("realized_pnl") or 0) > 0)
+        exit_sl_like = sum(1 for cp in closed_positions if float(cp.get("realized_pnl") or 0) < 0)
+        exit_other = max(0, len(closed_positions) - exit_tp_like - exit_sl_like)
+        exit_reason_source = "proxy"
 
     # Average R by CLOSED LOSING POSITION at close time.
     # Preferred source = account snapshots (verified). Fallback = reconstructed wallet curve.
@@ -363,7 +393,7 @@ def get_stats_overview(
         "win_rate_short_pct": round(win_rate_short, 2),
         "avg_holding_hours": round(avg_holding_hours, 2),
         "avg_holding_seconds": int(avg_holding_seconds),
-        "exit_reason_source": "proxy",
+        "exit_reason_source": exit_reason_source,
         "exit_tp_like_count": int(exit_tp_like),
         "exit_sl_like_count": int(exit_sl_like),
         "exit_other_count": int(exit_other),
@@ -493,6 +523,7 @@ def get_trades(
                 "executed_at": t["executed_at"].isoformat(),
                 "signal_id": t.get("signal_id"),
                 "decision_id": t.get("decision_id"),
+                "exit_reason": t.get("exit_reason"),
             }
             for t in page
         ]

@@ -10,7 +10,7 @@ app = FastAPI(title=settings.app_name, debug=settings.debug)
 
 
 def _ensure_trade_traceability_columns() -> None:
-    """Lightweight runtime migration for signal_id / decision_id.
+    """Lightweight runtime migration for signal_id / decision_id / exit_reason.
 
     Keeps local SQLite and existing Postgres dev databases compatible
     without introducing Alembic yet.
@@ -27,6 +27,8 @@ def _ensure_trade_traceability_columns() -> None:
         ddl.append("ALTER TABLE trades ADD COLUMN signal_id VARCHAR(128)")
     if "decision_id" not in existing_cols:
         ddl.append("ALTER TABLE trades ADD COLUMN decision_id VARCHAR(128)")
+    if "exit_reason" not in existing_cols:
+        ddl.append("ALTER TABLE trades ADD COLUMN exit_reason VARCHAR(32)")
 
     if not ddl:
         return
@@ -40,9 +42,11 @@ def _ensure_trade_traceability_columns() -> None:
             if dialect == "sqlite":
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_trades_signal_id ON trades (signal_id)"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_trades_decision_id ON trades (decision_id)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_trades_exit_reason ON trades (exit_reason)"))
             else:
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_trades_signal_id ON trades (signal_id)"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_trades_decision_id ON trades (decision_id)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_trades_exit_reason ON trades (exit_reason)"))
         except Exception:
             pass
 

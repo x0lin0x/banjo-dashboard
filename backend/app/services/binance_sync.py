@@ -96,6 +96,7 @@ class BinanceSyncService:
                 realized_pnl=Decimal(str(raw.get("realizedPnl", "0"))),
                 signal_id=str(raw.get("signalId", "")) or None,
                 decision_id=str(raw.get("decisionId", "")) or None,
+                exit_reason=str(raw.get("exitReason", "")) or None,
                 executed_at=datetime.fromtimestamp(int(raw.get("time", int(time.time() * 1000))) / 1000, tz=timezone.utc),
             )
             db.add(trade)

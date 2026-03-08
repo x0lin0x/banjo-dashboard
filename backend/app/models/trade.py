@@ -19,5 +19,6 @@ class Trade(Base):
     realized_pnl: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
     signal_id: Mapped[str | None] = mapped_column(String(128), index=True)
     decision_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    exit_reason: Mapped[str | None] = mapped_column(String(32), index=True)
     executed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
