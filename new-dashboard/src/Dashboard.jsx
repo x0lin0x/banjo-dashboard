@@ -438,14 +438,14 @@ function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
         <Card label='BALANCE (incl. margin)' value={stats?.account_balance == null ? 'n/a' : `$${Number(stats.account_balance).toFixed(2)}`} color='#8ab4ff' />
         <Card label='MAX DD (window)' value={`${stats?.max_drawdown_pct ?? 0}%`} color={ddColor} />
-        <Card label='LAST ATH' value={stats?.last_ath_balance == null ? 'n/a' : `$${Number(stats.last_ath_balance).toFixed(2)}`} color='#ffd166' />
+        <Card label='LAST ATH (proxy)' value={stats?.last_ath_balance == null ? 'n/a' : `$${Number(stats.last_ath_balance).toFixed(2)}`} color='#ffd166' />
         <Card label='HOURS SINCE ATH' value={`${Number(stats?.hours_since_last_ath ?? 0).toFixed(1)}h`} color='#c8c8ff' />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
         <Card label='GROSS LONG' value={`$${(risk?.gross_long_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#39ff14' />
         <Card label='GROSS SHORT' value={`$${(risk?.gross_short_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#ff3131' />
-        <Card label='AVG R LOSS (by closed pos)' value={`${Number(stats?.avg_r_loss_pct ?? 0).toFixed(2)}%`} color='#ff6b6b' />
+        <Card label='AVG R LOSS (vs current balance)' value={`${Number(stats?.avg_r_loss_pct_current_balance ?? stats?.avg_r_loss_pct ?? 0).toFixed(2)}%`} color='#ff6b6b' />
         <Card label='AVG LOSS $ (closed pos)' value={`$${Number(stats?.avg_r_loss_usd ?? 0).toFixed(2)}`} color='#ff9f9f' />
       </div>
 

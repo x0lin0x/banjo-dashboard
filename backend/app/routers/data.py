@@ -218,6 +218,12 @@ def get_stats_overview(
     avg_r_loss_pct = (sum(losing_rs_pct) / len(losing_rs_pct)) if losing_rs_pct else 0.0
     avg_r_loss_usd = (sum(losing_pnls_usd) / len(losing_pnls_usd)) if losing_pnls_usd else 0.0
 
+    current_balance_ref = float(account_balance_total or account_balance_wallet or 0.0)
+    avg_r_loss_pct_current_balance = (avg_r_loss_usd / current_balance_ref * 100) if current_balance_ref > 0 else 0.0
+
+    # Display ATH on same basis as BALANCE card (incl. current margin proxy).
+    ath_balance_display = max(ath_wallet + margin_used_positions, float(account_balance_total or 0.0))
+
     now = datetime.now(timezone.utc)
     hours_since_ath = max(0.0, (now - ath_ts).total_seconds() / 3600)
 
@@ -232,9 +238,10 @@ def get_stats_overview(
         "account_balance_wallet": account_balance_wallet,
         "margin_used_positions": round(margin_used_positions, 8),
         "max_drawdown_pct": round(max_drawdown_pct, 2),
-        "last_ath_balance": round(ath_wallet, 8),
+        "last_ath_balance": round(ath_balance_display, 8),
         "hours_since_last_ath": round(hours_since_ath, 2),
         "avg_r_loss_pct": round(avg_r_loss_pct, 4),
+        "avg_r_loss_pct_current_balance": round(avg_r_loss_pct_current_balance, 4),
         "avg_r_loss_usd": round(avg_r_loss_usd, 8),
         "losing_closed_positions": len(losing_rs_pct),
         "updated_at": datetime.now(timezone.utc).isoformat(),
