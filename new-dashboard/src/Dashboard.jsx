@@ -500,6 +500,13 @@ function Dashboard() {
           <span>Server time: <strong>{diag?.sync?.server_time ? new Date(diag.sync.server_time).toLocaleString() : 'n/a'}</strong></span>
           <span>Min sync interval: <strong>{diag?.sync?.min_interval_seconds ?? 'n/a'}s</strong></span>
         </div>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 10, color: '#b7bbd8' }}>
+          <span>Data quality:</span>
+          <span>R loss <strong>{stats?.data_quality?.avg_r_loss || 'n/a'}</strong></span>
+          <span>R by trade <strong>{stats?.data_quality?.avg_r_by_trade || 'n/a'}</strong></span>
+          <span>Exit dist <strong>{stats?.data_quality?.exit_distribution || 'n/a'}</strong></span>
+          <span>Funding <strong>{stats?.data_quality?.funding_fees || 'n/a'}</strong></span>
+        </div>
       </div>
 
       <div style={panelStyle()}>
