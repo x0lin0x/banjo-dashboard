@@ -596,7 +596,7 @@ function Dashboard() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
         <Card label='TRADING FEES (window)' value={`$${Number(stats?.total_fees_window ?? 0).toFixed(2)}`} color='#ff9f9f' />
-        <Card label='FUNDING FEES (cum.)' value={stats?.funding_fees_cumulative == null ? 'n/a' : `$${Number(stats?.funding_fees_cumulative).toFixed(2)}`} color='#c8c8ff' />
+        <Card label='FUNDING FEES (window)' value={stats?.funding_fees_cumulative == null ? 'n/a' : `$${Number(stats?.funding_fees_cumulative).toFixed(2)}`} color='#c8c8ff' />
         <Card label='FUNDING SOURCE' value={`${stats?.funding_fees_source || 'n/a'}`} color='#8ab4ff' />
         <Card label='HOURS SINCE ATH' value={`${Number(stats?.hours_since_last_ath ?? 0).toFixed(1)}h`} color='#c8c8ff' />
       </div>

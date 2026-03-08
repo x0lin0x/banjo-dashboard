@@ -625,6 +625,19 @@ def get_stats_overview(
     now = datetime.now(timezone.utc)
     hours_since_ath = max(0.0, (now - ath_ts).total_seconds() / 3600)
 
+    funding_fees_cumulative = None
+    funding_fees_source = "unavailable"
+    try:
+        start_ms = int(since.timestamp() * 1000)
+        end_ms = int(now_utc.timestamp() * 1000)
+        funding = binance_sync_service.fetch_funding_fees_sum(start_time_ms=start_ms, end_time_ms=end_ms, max_pages=10)
+        if funding is not None:
+            funding_fees_cumulative = float(funding)
+            funding_fees_source = "exact_window"
+    except Exception:
+        funding_fees_cumulative = None
+        funding_fees_source = "unavailable"
+
     return {
         "total_trades": total_trades,
         "total_closed_trades": total_closed_trades,
@@ -633,8 +646,8 @@ def get_stats_overview(
         "total_unrealized_pnl": total_unrealized_pnl,
         "net_pnl_after_fees": round(net_pnl_after_fees, 8),
         "total_fees_window": round(total_fees_window, 8),
-        "funding_fees_cumulative": None,
-        "funding_fees_source": "unavailable",
+        "funding_fees_cumulative": round(funding_fees_cumulative, 8) if funding_fees_cumulative is not None else None,
+        "funding_fees_source": funding_fees_source,
         "profit_factor": round(profit_factor, 4) if profit_factor is not None else None,
         "expectancy": round(expectancy, 8),
         "avg_win_loss_ratio": round(avg_win_loss_ratio, 4) if avg_win_loss_ratio is not None else None,
