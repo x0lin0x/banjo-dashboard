@@ -20,6 +20,12 @@ const DEFAULT_SHOW_SECTIONS = {
   tables: true
 }
 
+const SECTION_PRESETS = {
+  Core: { health: true, execution: false, riskPerf: true, alerts: true, market: true, tables: false },
+  Ops: { health: true, execution: true, riskPerf: false, alerts: true, market: false, tables: true },
+  Full: { health: true, execution: true, riskPerf: true, alerts: true, market: true, tables: true }
+}
+
 function Card({ label, value, color = '#b026ff' }) {
   return (
     <div style={{ background: '#1a1a2e', border: `1px solid ${color}`, padding: 20, borderRadius: 12, boxShadow: `0 0 16px ${color}33` }}>
@@ -473,7 +479,18 @@ function Dashboard() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 10, color: '#b7bbd8', fontSize: 13 }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 10, color: '#b7bbd8', fontSize: 13, alignItems: 'center' }}>
+        <span>Preset:</span>
+        {Object.entries(SECTION_PRESETS).map(([name, conf]) => (
+          <button
+            key={name}
+            onClick={() => setShowSections(conf)}
+            style={{ background: '#1a1a2e', color: '#fff', border: '1px solid #2a2a3f', borderRadius: 999, padding: '4px 10px', fontSize: 12, fontWeight: 700 }}
+          >
+            {name}
+          </button>
+        ))}
+        <span style={{ marginLeft: 8 }}>Custom:</span>
         {Object.entries(showSections).map(([k, v]) => (
           <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <input type='checkbox' checked={!!v} onChange={(e) => setShowSections((p) => ({ ...p, [k]: e.target.checked }))} />
