@@ -6,8 +6,9 @@ import io
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
@@ -19,9 +20,25 @@ from app.models.execution_event import ExecutionEvent
 from app.models.position import Position
 from app.models.sync_event import SyncEvent
 from app.models.trade import Trade
+from app.security import require_sync_access
 from app.services.binance_sync import binance_sync_service
 
 router = APIRouter(prefix="/api/v1", tags=["data"])
+
+
+class ExecutionEventIn(BaseModel):
+    source: str = "bot-runtime"
+    symbol: str | None = None
+    signal_id: str | None = None
+    decision_id: str | None = None
+    event_type: str
+    status: str = "ok"
+    latency_ms: int | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    exit_reason: str | None = None
+    order_id: str | None = None
+    binance_trade_id: str | None = None
 
 
 def _parse_window(window: str) -> timedelta:
@@ -33,6 +50,25 @@ def _as_utc(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
+
+
+def _normalize_exit_reason(value: str | None) -> str | None:
+    if value is None:
+        return None
+    raw = str(value).strip().lower()
+    if not raw:
+        return None
+    if raw in {"tp", "take_profit", "takeprofit"}:
+        return "tp"
+    if raw in {"sl", "stop_loss", "stoploss"}:
+        return "sl"
+    if raw in {"manual", "manual_close", "user_close"}:
+        return "manual"
+    if raw in {"opposite", "reverse", "flip"}:
+        return "opposite"
+    if raw in {"timeout", "time", "expiry"}:
+        return "timeout"
+    return "other"
 
 
 def _aggregate_trade_fills(trades: list[Trade]) -> list[dict]:
@@ -365,6 +401,61 @@ def execution_errors_timeseries(
 
     points = [{"ts": k, "errors": buckets[k]} for k in sorted(buckets.keys())]
     return {"window": window, "points": points}
+
+
+@router.post("/execution/events")
+def execution_events_ingest(
+    payload: ExecutionEventIn,
+    _: None = Depends(require_sync_access),
+    db: Session = Depends(get_db),
+):
+    evt = ExecutionEvent(
+        source=payload.source,
+        symbol=(payload.symbol or None),
+        signal_id=payload.signal_id,
+        decision_id=payload.decision_id,
+        event_type=payload.event_type,
+        status=(payload.status or "ok"),
+        latency_ms=payload.latency_ms,
+        error_code=payload.error_code,
+        error_message=payload.error_message,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(evt)
+
+    updated = 0
+    normalized_exit = _normalize_exit_reason(payload.exit_reason)
+    if normalized_exit:
+        q = db.query(Trade)
+        if payload.binance_trade_id:
+            q = q.filter(Trade.binance_trade_id == payload.binance_trade_id)
+        elif payload.order_id:
+            q = q.filter(Trade.order_id == payload.order_id)
+        elif payload.symbol and payload.decision_id:
+            q = q.filter(Trade.symbol == payload.symbol.upper()).filter(Trade.decision_id == payload.decision_id)
+        elif payload.symbol and payload.signal_id:
+            q = q.filter(Trade.symbol == payload.symbol.upper()).filter(Trade.signal_id == payload.signal_id)
+        else:
+            q = None
+
+        if q is not None:
+            rows = q.all()
+            for t in rows:
+                t.exit_reason = normalized_exit
+            updated = len(rows)
+
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"execution_event_commit_failed: {exc}")
+
+    return {
+        "status": "ok",
+        "event_type": payload.event_type,
+        "exit_reason": normalized_exit,
+        "trades_exit_reason_updated": updated,
+    }
 
 
 @router.get("/execution/events")

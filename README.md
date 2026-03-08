@@ -24,6 +24,7 @@ Base URL: `http://localhost:8000/api/v1`
 - `GET /health/runtime` (bot status, heartbeat age, open positions, open uPnL, API errors 24h)
 - `GET /execution/summary?window=24h|7d|30d` (events count, errors, errors_1h, missed-like, avg latency, p50, p95)
 - `GET /execution/events?limit=20&offset=0&status=ok|error` (latest execution telemetry)
+- `POST /execution/events` (bot/runtime ingestion for execution telemetry + optional exact exit reason updates)
 - `GET /execution/errors-timeseries?window=24h|7d|30d` (error count by hour)
 - `GET /sync/events?limit=20&offset=0&endpoint=sync/all&status=ok|error` (latest sync action logs, filterable)
 - `GET /sync/events.csv?endpoint=sync/all&status=ok|error` (sync events CSV export)
