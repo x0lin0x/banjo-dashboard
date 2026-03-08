@@ -13,6 +13,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.account_snapshot import AccountSnapshot
 from app.models.bot_heartbeat import BotHeartbeat
+from app.models.execution_event import ExecutionEvent
 from app.models.position import Position
 from app.models.sync_event import SyncEvent
 from app.models.trade import Trade
@@ -194,6 +195,68 @@ def health_runtime(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/execution/summary")
+def execution_summary(
+    window: str = Query(default="24h", pattern="^(24h|7d|30d)$"),
+    db: Session = Depends(get_db),
+):
+    since = datetime.now(timezone.utc) - _parse_window(window)
+    q = db.query(ExecutionEvent).filter(ExecutionEvent.created_at >= since)
+
+    total = q.count()
+    errors = q.filter(ExecutionEvent.status == "error").count()
+    missed = q.filter(ExecutionEvent.event_type == "missed").count()
+
+    latency_vals = [r[0] for r in q.with_entities(ExecutionEvent.latency_ms).all() if r[0] is not None]
+    avg_latency_ms = (sum(latency_vals) / len(latency_vals)) if latency_vals else None
+
+    return {
+        "window": window,
+        "total_events": total,
+        "errors": int(errors),
+        "missed": int(missed),
+        "avg_latency_ms": round(avg_latency_ms, 2) if avg_latency_ms is not None else None,
+        "source": "exact",
+    }
+
+
+@router.get("/execution/events")
+def execution_events(
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    window: str = Query(default="24h", pattern="^(24h|7d|30d)$"),
+    status_value: str | None = Query(default=None, alias="status", pattern="^(ok|error)$"),
+    db: Session = Depends(get_db),
+):
+    since = datetime.now(timezone.utc) - _parse_window(window)
+    q = db.query(ExecutionEvent).filter(ExecutionEvent.created_at >= since)
+    if status_value:
+        q = q.filter(ExecutionEvent.status == status_value)
+
+    total = q.count()
+    rows = q.order_by(ExecutionEvent.created_at.desc()).offset(offset).limit(limit).all()
+
+    return {
+        "window": window,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "events": [
+            {
+                "id": e.id,
+                "source": e.source,
+                "symbol": e.symbol,
+                "event_type": e.event_type,
+                "status": e.status,
+                "latency_ms": e.latency_ms,
+                "error_message": e.error_message,
+                "created_at": _as_utc(e.created_at).isoformat() if e.created_at else None,
+            }
+            for e in rows
+        ],
+    }
+
+
 @router.get("/stats/overview")
 def get_stats_overview(
     window: str = Query(default="30d", pattern="^(24h|7d|30d)$"),
@@ -212,14 +275,21 @@ def get_stats_overview(
 
     account_balance_wallet = None
     account_balance_total = None
+    account_available_est = None
     try:
         bal = binance_sync_service.fetch_account_balance(asset="USDT")
+        avail = binance_sync_service.fetch_account_available_balance(asset="USDT")
         if bal is not None:
             account_balance_wallet = float(bal)
             account_balance_total = account_balance_wallet + margin_used_positions
+        if avail is not None:
+            account_available_est = float(avail)
+        elif account_balance_wallet is not None:
+            account_available_est = account_balance_wallet - margin_used_positions
     except Exception:
         account_balance_wallet = None
         account_balance_total = None
+        account_available_est = None
 
     now_utc = datetime.now(timezone.utc)
     since = now_utc - _parse_window(window)
@@ -416,6 +486,7 @@ def get_stats_overview(
         "equity": equity,
         "account_balance": account_balance_total,
         "account_balance_wallet": account_balance_wallet,
+        "account_available_est": round(account_available_est, 8) if account_available_est is not None else None,
         "margin_used_positions": round(margin_used_positions, 8),
         "max_drawdown_pct": round(max_drawdown_pct, 2),
         "last_ath_balance": round(ath_balance_display, 8),

@@ -9,6 +9,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.account_snapshot import AccountSnapshot
 from app.models.bot_heartbeat import BotHeartbeat
+from app.models.execution_event import ExecutionEvent
 from app.models.position import Position
 from app.models.sync_event import SyncEvent
 from app.security import require_sync_access
@@ -82,6 +83,27 @@ def _log_heartbeat(db: Session, status_value: str = "ok", note: str | None = Non
     db.commit()
 
 
+def _log_execution_event(
+    db: Session,
+    event_type: str,
+    status_value: str,
+    latency_ms: int | None,
+    symbol: str | None = None,
+    error_message: str | None = None,
+) -> None:
+    evt = ExecutionEvent(
+        source="dashboard-sync",
+        symbol=symbol,
+        event_type=event_type,
+        status=status_value,
+        latency_ms=latency_ms,
+        error_message=error_message,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(evt)
+    db.commit()
+
+
 def _snapshot_account_state(db: Session) -> None:
     wallet = binance_sync_service.fetch_account_balance(asset="USDT")
 
@@ -124,11 +146,15 @@ def sync_trades(
             _snapshot_account_state(db)
         except Exception:
             pass
-        _log_sync_event(db, endpoint, actor, "ok", None, symbol.upper(), int((time.time() - started) * 1000))
+        duration = int((time.time() - started) * 1000)
+        _log_sync_event(db, endpoint, actor, "ok", None, symbol.upper(), duration)
+        _log_execution_event(db, event_type=endpoint, status_value="ok", latency_ms=duration, symbol=symbol.upper())
         _log_heartbeat(db, status_value="ok")
         return {"status": "ok", "type": "trades", "symbol": symbol.upper(), "inserted": inserted}
     except Exception as exc:
-        _log_sync_event(db, endpoint, actor, "error", str(exc)[:240], symbol.upper(), int((time.time() - started) * 1000))
+        duration = int((time.time() - started) * 1000)
+        _log_sync_event(db, endpoint, actor, "error", str(exc)[:240], symbol.upper(), duration)
+        _log_execution_event(db, event_type=endpoint, status_value="error", latency_ms=duration, symbol=symbol.upper(), error_message=str(exc)[:240])
         _log_heartbeat(db, status_value="error", note=str(exc)[:240])
         raise
 
@@ -150,11 +176,15 @@ def sync_positions(
             _snapshot_account_state(db)
         except Exception:
             pass
-        _log_sync_event(db, endpoint, actor, "ok", None, None, int((time.time() - started) * 1000))
+        duration = int((time.time() - started) * 1000)
+        _log_sync_event(db, endpoint, actor, "ok", None, None, duration)
+        _log_execution_event(db, event_type=endpoint, status_value="ok", latency_ms=duration)
         _log_heartbeat(db, status_value="ok")
         return {"status": "ok", "type": "positions", "updated": updated}
     except Exception as exc:
-        _log_sync_event(db, endpoint, actor, "error", str(exc)[:240], None, int((time.time() - started) * 1000))
+        duration = int((time.time() - started) * 1000)
+        _log_sync_event(db, endpoint, actor, "error", str(exc)[:240], None, duration)
+        _log_execution_event(db, event_type=endpoint, status_value="error", latency_ms=duration, error_message=str(exc)[:240])
         _log_heartbeat(db, status_value="error", note=str(exc)[:240])
         raise
 
@@ -179,10 +209,14 @@ def sync_all(
             _snapshot_account_state(db)
         except Exception:
             pass
-        _log_sync_event(db, endpoint, actor, "ok", None, symbol.upper(), int((time.time() - started) * 1000))
+        duration = int((time.time() - started) * 1000)
+        _log_sync_event(db, endpoint, actor, "ok", None, symbol.upper(), duration)
+        _log_execution_event(db, event_type=endpoint, status_value="ok", latency_ms=duration, symbol=symbol.upper())
         _log_heartbeat(db, status_value="ok")
         return {"status": "ok", "symbol": symbol.upper(), "trades_inserted": inserted, "positions_updated": updated}
     except Exception as exc:
-        _log_sync_event(db, endpoint, actor, "error", str(exc)[:240], symbol.upper(), int((time.time() - started) * 1000))
+        duration = int((time.time() - started) * 1000)
+        _log_sync_event(db, endpoint, actor, "error", str(exc)[:240], symbol.upper(), duration)
+        _log_execution_event(db, event_type=endpoint, status_value="error", latency_ms=duration, symbol=symbol.upper(), error_message=str(exc)[:240])
         _log_heartbeat(db, status_value="error", note=str(exc)[:240])
         raise

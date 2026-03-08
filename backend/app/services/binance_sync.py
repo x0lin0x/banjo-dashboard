@@ -48,6 +48,20 @@ class BinanceSyncService:
         endpoint = "/fapi/v2/positionRisk"
         return self._signed_get(endpoint)
 
+    def _fetch_balance_row(self, asset: str = "USDT") -> dict | None:
+        wanted = asset.upper().strip()
+
+        if not self.api_key or not self.api_secret:
+            logger.warning("No Binance credentials found. Returning mock balance row.")
+            return {"asset": wanted, "balance": "10000", "availableBalance": "9900"}
+
+        endpoint = "/fapi/v2/balance"
+        rows = self._signed_get(endpoint)
+        for row in rows:
+            if str(row.get("asset", "")).upper() == wanted:
+                return row
+        return None
+
     def fetch_account_balance(self, asset: str = "USDT") -> Decimal | None:
         wanted = asset.upper().strip()
 
@@ -57,26 +71,21 @@ class BinanceSyncService:
         if cached and (now - cached[0]) < self._balance_cache_ttl_seconds:
             return cached[1]
 
-        if not self.api_key or not self.api_secret:
-            logger.warning("No Binance credentials found. Returning mock balance.")
-            value = Decimal("10000")
-            self._balance_cache[wanted] = (now, value)
-            return value
-
-        endpoint = "/fapi/v2/balance"
-        rows = self._signed_get(endpoint)
+        row = self._fetch_balance_row(asset=wanted)
         value = None
-        for row in rows:
-            if str(row.get("asset", "")).upper() != wanted:
-                continue
-            # Prefer `balance` to match Binance UI wallet display,
-            # fallback to crossWalletBalance if needed.
+        if row is not None:
             raw = row.get("balance", row.get("crossWalletBalance", "0"))
             value = Decimal(str(raw))
-            break
 
         self._balance_cache[wanted] = (now, value)
         return value
+
+    def fetch_account_available_balance(self, asset: str = "USDT") -> Decimal | None:
+        row = self._fetch_balance_row(asset=asset)
+        if row is None:
+            return None
+        raw = row.get("availableBalance", row.get("balance", "0"))
+        return Decimal(str(raw))
 
     def sync_trades(self, db: Session, symbol: str = "BTCUSDT", limit: int = 100) -> int:
         trades = self.fetch_recent_trades(symbol=symbol, limit=limit)

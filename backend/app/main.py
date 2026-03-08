@@ -4,7 +4,7 @@ from sqlalchemy import inspect, text
 from app.config import settings
 from app.database import Base, engine
 from app.routers.sync import router as sync_router
-from app.models import AccountSnapshot, BotHeartbeat, Position, SyncEvent, Trade  # noqa: F401
+from app.models import AccountSnapshot, BotHeartbeat, ExecutionEvent, Position, SyncEvent, Trade  # noqa: F401
 
 app = FastAPI(title=settings.app_name, debug=settings.debug)
 
