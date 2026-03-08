@@ -652,6 +652,9 @@ function Dashboard() {
               <span>Exit dist <strong>{stats?.data_quality?.exit_distribution || 'n/a'}</strong></span>
               <span>Funding <strong>{stats?.data_quality?.funding_fees || 'n/a'}</strong></span>
             </div>
+            <div style={{ marginTop: 8, color: '#b7bbd8', fontSize: 13 }}>
+              Integration mode: <strong>{Number(stats?.exit_exact_coverage_pct ?? 0) > 0 ? 'API + Bot events (partial exact)' : 'API-only'}</strong>
+            </div>
           </div>
         </>
       )}

@@ -103,6 +103,11 @@ If Binance keys are missing, sync service returns mock data for development.
 
 See `README_OPS.md` for start/stop, troubleshooting, token rotation, and V1 validation checklist.
 
+## Product docs
+
+- `docs/FEATURE_AVAILABILITY.md` — API-only vs API+Bot-events capability matrix
+- `docs/INTEGRATION_BOT_EVENTS.md` — optional bot event ingestion contract
+
 ## Schema notes
 
 On startup, backend applies lightweight runtime migrations for trade traceability fields (`signal_id`, `decision_id`, `exit_reason`) on local/dev DBs.
