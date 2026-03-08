@@ -6,12 +6,25 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.binance_sync import binance_sync_service
 from app.models.bot_heartbeat import BotHeartbeat
+from app.models.execution_event import ExecutionEvent
 from app.models.position import Position
 from app.models.sync_event import SyncEvent
 from app.models.trade import Trade
 from app.security import require_sync_access
 
 router = APIRouter(prefix="/api/v1", tags=["scan"])
+
+
+def _safe_commit(db: Session) -> bool:
+    try:
+        db.commit()
+        return True
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return False
 
 
 def _log_sync_event(
@@ -30,7 +43,7 @@ def _log_sync_event(
         created_at=datetime.now(timezone.utc),
     )
     db.add(evt)
-    db.commit()
+    _safe_commit(db)
 
 
 def _log_heartbeat(db: Session, status_value: str = "ok", note: str | None = None) -> None:
@@ -41,7 +54,25 @@ def _log_heartbeat(db: Session, status_value: str = "ok", note: str | None = Non
         created_at=datetime.now(timezone.utc),
     )
     db.add(hb)
-    db.commit()
+    _safe_commit(db)
+
+
+def _log_execution_event(
+    db: Session,
+    status_value: str,
+    latency_ms: int,
+    error_message: str | None = None,
+) -> None:
+    evt = ExecutionEvent(
+        source="dashboard-scan",
+        event_type="sync/scan-all-symbols",
+        status=status_value,
+        latency_ms=latency_ms,
+        error_message=error_message,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(evt)
+    _safe_commit(db)
 
 
 @router.post("/sync/scan-all-symbols")
@@ -105,7 +136,9 @@ def scan_all_symbols(
             except Exception as e:
                 results.append({"symbol": symbol, "error": str(e)})
 
-        _log_sync_event(db, "ok", None, int((time.time() - started) * 1000))
+        duration = int((time.time() - started) * 1000)
+        _log_sync_event(db, "ok", None, duration)
+        _log_execution_event(db, "ok", duration)
         _log_heartbeat(db, status_value="ok")
 
         return {
@@ -119,6 +152,12 @@ def scan_all_symbols(
             "results": results,
         }
     except Exception as exc:
-        _log_sync_event(db, "error", str(exc)[:240], int((time.time() - started) * 1000))
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        duration = int((time.time() - started) * 1000)
+        _log_sync_event(db, "error", str(exc)[:240], duration)
+        _log_execution_event(db, "error", duration, error_message=str(exc)[:240])
         _log_heartbeat(db, status_value="error", note=str(exc)[:240])
         raise

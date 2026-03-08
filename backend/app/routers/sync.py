@@ -50,6 +50,18 @@ def _actor_from_request(request: Request) -> str:
     return f"ip:{host}"
 
 
+def _safe_commit(db: Session) -> bool:
+    try:
+        db.commit()
+        return True
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return False
+
+
 def _log_sync_event(
     db: Session,
     endpoint: str,
@@ -69,7 +81,7 @@ def _log_sync_event(
         created_at=datetime.now(timezone.utc),
     )
     db.add(evt)
-    db.commit()
+    _safe_commit(db)
 
 
 def _log_heartbeat(db: Session, status_value: str = "ok", note: str | None = None) -> None:
@@ -80,7 +92,7 @@ def _log_heartbeat(db: Session, status_value: str = "ok", note: str | None = Non
         created_at=datetime.now(timezone.utc),
     )
     db.add(hb)
-    db.commit()
+    _safe_commit(db)
 
 
 def _log_execution_event(
@@ -101,7 +113,7 @@ def _log_execution_event(
         created_at=datetime.now(timezone.utc),
     )
     db.add(evt)
-    db.commit()
+    _safe_commit(db)
 
 
 def _snapshot_account_state(db: Session) -> None:
@@ -124,7 +136,8 @@ def _snapshot_account_state(db: Session) -> None:
         created_at=datetime.now(timezone.utc),
     )
     db.add(snap)
-    db.commit()
+    if not _safe_commit(db):
+        raise RuntimeError("snapshot_commit_failed")
 
 
 @router.post("/trades")
@@ -152,6 +165,10 @@ def sync_trades(
         _log_heartbeat(db, status_value="ok")
         return {"status": "ok", "type": "trades", "symbol": symbol.upper(), "inserted": inserted}
     except Exception as exc:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         duration = int((time.time() - started) * 1000)
         _log_sync_event(db, endpoint, actor, "error", str(exc)[:240], symbol.upper(), duration)
         _log_execution_event(db, event_type=endpoint, status_value="error", latency_ms=duration, symbol=symbol.upper(), error_message=str(exc)[:240])
@@ -182,6 +199,10 @@ def sync_positions(
         _log_heartbeat(db, status_value="ok")
         return {"status": "ok", "type": "positions", "updated": updated}
     except Exception as exc:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         duration = int((time.time() - started) * 1000)
         _log_sync_event(db, endpoint, actor, "error", str(exc)[:240], None, duration)
         _log_execution_event(db, event_type=endpoint, status_value="error", latency_ms=duration, error_message=str(exc)[:240])
@@ -215,6 +236,10 @@ def sync_all(
         _log_heartbeat(db, status_value="ok")
         return {"status": "ok", "symbol": symbol.upper(), "trades_inserted": inserted, "positions_updated": updated}
     except Exception as exc:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         duration = int((time.time() - started) * 1000)
         _log_sync_event(db, endpoint, actor, "error", str(exc)[:240], symbol.upper(), duration)
         _log_execution_event(db, event_type=endpoint, status_value="error", latency_ms=duration, symbol=symbol.upper(), error_message=str(exc)[:240])

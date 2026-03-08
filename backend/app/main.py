@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 from fastapi import FastAPI
 from sqlalchemy import inspect, text
 
@@ -51,8 +54,27 @@ def _ensure_trade_traceability_columns() -> None:
             pass
 
 
+def _check_db_writable() -> None:
+    # Explicit startup warning for readonly sqlite scenarios.
+    db_url = str(settings.database_url or "")
+    if not db_url.startswith("sqlite:///"):
+        return
+
+    db_path = db_url.replace("sqlite:///", "", 1)
+    p = Path(db_path)
+    if not p.is_absolute():
+        p = (Path.cwd() / p).resolve()
+
+    parent = p.parent
+    file_w = (not p.exists()) or os.access(p, os.W_OK)
+    dir_w = os.access(parent, os.W_OK)
+    if not (file_w and dir_w):
+        print(f"[startup][warn] Database may be readonly: path={p} file_writable={file_w} dir_writable={dir_w}")
+
+
 @app.on_event("startup")
 def on_startup() -> None:
+    _check_db_writable()
     Base.metadata.create_all(bind=engine)
     _ensure_trade_traceability_columns()
 
