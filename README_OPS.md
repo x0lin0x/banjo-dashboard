@@ -84,6 +84,13 @@ chmod +x scripts/smoke_api_v1.sh
 BASE_URL=http://localhost:8000 SYNC_TOKEN='<token-if-needed>' ./scripts/smoke_api_v1.sh
 ```
 
+Metrics sanity (V1.1 risk/perf consistency):
+```bash
+cd /home/guts/.openclaw/workspace/trading-dashboard
+chmod +x scripts/qa_metrics_sanity_v1_1.sh
+BASE_URL=http://localhost:8000 ./scripts/qa_metrics_sanity_v1_1.sh
+```
+
 ---
 
 ## 6) Backup / restore (SQLite default)
