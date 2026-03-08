@@ -570,6 +570,16 @@ function Dashboard() {
         </div>
       </div>
 
+      <div style={panelStyle()}>
+        <h3 style={{ marginTop: 0, color: '#ffd166' }}>Risk strip</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          <Card label='CURRENT DD' value={`${Number(stats?.current_drawdown_pct ?? 0).toFixed(2)}%`} color={Number(stats?.current_drawdown_pct ?? 0) > 0 ? '#ff6b6b' : '#39ff14'} />
+          <Card label='MAX DD' value={`${Number(stats?.max_drawdown_pct ?? 0).toFixed(2)}%`} color='#ff9f9f' />
+          <Card label='DD DURATION' value={`${Number(stats?.max_dd_duration_hours ?? 0).toFixed(1)}h`} color='#ffd166' />
+          <Card label='MAX CONSEC LOSSES' value={`${Number(stats?.max_consecutive_losses ?? 0)}`} color='#ff9f9f' />
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 24 }}>
         <Card label='POSITIONS' value={stats?.total_positions ?? 0} color='#b026ff' />
         <Card label='CLOSED POSITIONS' value={stats?.total_closed_trades ?? stats?.total_trades ?? 0} color='#00f3ff' />
@@ -585,17 +595,17 @@ function Dashboard() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
+        <Card label='TRADING FEES (window)' value={`$${Number(stats?.total_fees_window ?? 0).toFixed(2)}`} color='#ff9f9f' />
+        <Card label='FUNDING FEES (cum.)' value={stats?.funding_fees_cumulative == null ? 'n/a' : `$${Number(stats?.funding_fees_cumulative).toFixed(2)}`} color='#c8c8ff' />
+        <Card label='FUNDING SOURCE' value={`${stats?.funding_fees_source || 'n/a'}`} color='#8ab4ff' />
+        <Card label='HOURS SINCE ATH' value={`${Number(stats?.hours_since_last_ath ?? 0).toFixed(1)}h`} color='#c8c8ff' />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
         <Card label='BALANCE (wallet)' value={stats?.account_balance_wallet == null ? 'n/a' : `$${Number(stats.account_balance_wallet).toFixed(2)}`} color='#8ab4ff' />
         <Card label='AVAILABLE (est.)' value={stats?.account_available_est == null ? 'n/a' : `$${Number(stats.account_available_est).toFixed(2)}`} color='#7ce0ff' />
         <Card label='MARGIN USED' value={`$${Number(stats?.margin_used_positions ?? 0).toFixed(2)}`} color='#ffd166' />
         <Card label='MAX DD (window)' value={`${stats?.max_drawdown_pct ?? 0}%`} color={ddColor} />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
-        <Card label='CURRENT DD' value={`${Number(stats?.current_drawdown_pct ?? 0).toFixed(2)}%`} color={Number(stats?.current_drawdown_pct ?? 0) > 0 ? '#ff6b6b' : '#39ff14'} />
-        <Card label='MAX DD DURATION' value={`${Number(stats?.max_dd_duration_hours ?? 0).toFixed(1)}h`} color='#ffd166' />
-        <Card label='MAX CONSEC LOSSES' value={`${Number(stats?.max_consecutive_losses ?? 0)}`} color='#ff9f9f' />
-        <Card label='HOURS SINCE ATH' value={`${Number(stats?.hours_since_last_ath ?? 0).toFixed(1)}h`} color='#c8c8ff' />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>

@@ -633,6 +633,8 @@ def get_stats_overview(
         "total_unrealized_pnl": total_unrealized_pnl,
         "net_pnl_after_fees": round(net_pnl_after_fees, 8),
         "total_fees_window": round(total_fees_window, 8),
+        "funding_fees_cumulative": None,
+        "funding_fees_source": "unavailable",
         "profit_factor": round(profit_factor, 4) if profit_factor is not None else None,
         "expectancy": round(expectancy, 8),
         "avg_win_loss_ratio": round(avg_win_loss_ratio, 4) if avg_win_loss_ratio is not None else None,
