@@ -9,6 +9,7 @@ Environment: local / staging / production
 - [ ] `GET /api/v1/health/runtime` -> 200
 - [ ] `GET /api/v1/diagnostics/connectors` -> 200
 - [ ] `GET /api/v1/diagnostics/db-writable` -> 200 + coherent writable flags
+- [ ] `GET /api/v1/product/readiness?window=7d` -> 200 + coherent status (`READY|DEGRADED|ISSUES`)
 - [ ] Sync endpoints blocked with invalid token
 
 ## B) Sync resilience

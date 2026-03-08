@@ -34,6 +34,7 @@ request() {
 request GET "${BASE_URL}/health" 200
 request GET "${API_URL}/diagnostics/connectors" 200
 request GET "${API_URL}/diagnostics/db-writable" 200
+request GET "${API_URL}/product/readiness?window=30d" 200
 request GET "${API_URL}/stats/overview?window=30d" 200
 request GET "${API_URL}/stats/equity?window=30d" 200
 request GET "${API_URL}/risk/exposure" 200

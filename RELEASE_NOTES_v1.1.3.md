@@ -14,7 +14,9 @@ Patch release focused on reliability, diagnostics, and analytics quality hardeni
 
 ### Diagnostics
 - Added `GET /api/v1/diagnostics/db-writable` endpoint.
+- Added `GET /api/v1/product/readiness?window=...` endpoint (global readiness board).
 - Added runtime DB writable badge/warning in UI.
+- Added top-level Product Readiness badge in UI (`READY|DEGRADED|ISSUES`).
 
 ### Execution & exit analytics
 - Added optional `POST /api/v1/execution/events` ingestion endpoint for bot/runtime events.
