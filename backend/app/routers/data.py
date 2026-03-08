@@ -149,68 +149,76 @@ def get_stats_overview(
         account_balance_wallet = None
         account_balance_total = None
 
-    since = datetime.now(timezone.utc) - _parse_window(window)
-    window_trades = (
+    now_utc = datetime.now(timezone.utc)
+    since = now_utc - _parse_window(window)
+
+    all_trades = (
         db.query(Trade)
-        .filter(Trade.executed_at >= since)
+        .filter(Trade.executed_at <= now_utc)
         .order_by(Trade.executed_at.asc())
         .all()
     )
 
+    window_trades = [t for t in all_trades if t.executed_at >= since]
+
     # Window-aware metrics/counters
     total_realized_pnl = float(sum(float(t.realized_pnl or 0) for t in window_trades))
-    aggregated_orders = _aggregate_trade_fills(window_trades)
-    total_trades = len(aggregated_orders)
+    aggregated_orders_all = _aggregate_trade_fills(all_trades)
+    aggregated_orders_window = [o for o in aggregated_orders_all if o["executed_at"] >= since]
+    total_trades = len(aggregated_orders_window)
 
-    closed_positions = _extract_closed_positions(aggregated_orders)
+    closed_positions_all = _extract_closed_positions(aggregated_orders_all)
+    closed_positions = [cp for cp in closed_positions_all if cp["closed_at"] >= since]
     total_closed_trades = len(closed_positions)
     equity = total_realized_pnl + total_unrealized_pnl
 
-    # Reconstruct window wallet path from current wallet and realized pnl.
+    # Reconstruct full wallet path from current wallet and total realized history.
     current_wallet = float(account_balance_wallet or 0.0)
-    start_wallet_est = current_wallet - total_realized_pnl
+    total_realized_all = float(sum(float(t.realized_pnl or 0) for t in all_trades))
+    start_wallet_est_all = current_wallet - total_realized_all
 
-    # Drawdown + ATH on reconstructed wallet curve.
-    running_wallet = start_wallet_est
+    # Drawdown + ATH on WINDOW using reconstructed full path as baseline.
+    running_wallet = start_wallet_est_all
     peak_wallet = running_wallet
     ath_wallet = running_wallet
     ath_ts = since
     max_drawdown_pct = 0.0
 
-    for t in window_trades:
+    close_wallet_by_ts: dict[datetime, float] = {}
+    for t in all_trades:
         running_wallet += float(t.realized_pnl or 0)
-        if running_wallet > peak_wallet:
-            peak_wallet = running_wallet
-        if running_wallet > ath_wallet:
-            ath_wallet = running_wallet
-            ts = t.executed_at
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
-            ath_ts = ts
+        ts = t.executed_at
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        close_wallet_by_ts[ts] = running_wallet
 
-        if peak_wallet > 0:
-            dd = ((peak_wallet - running_wallet) / peak_wallet) * 100
-            if dd > max_drawdown_pct:
-                max_drawdown_pct = dd
+        if ts >= since:
+            if running_wallet > peak_wallet:
+                peak_wallet = running_wallet
+            if running_wallet > ath_wallet:
+                ath_wallet = running_wallet
+                ath_ts = ts
+
+            if peak_wallet > 0:
+                dd = ((peak_wallet - running_wallet) / peak_wallet) * 100
+                if dd > max_drawdown_pct:
+                    max_drawdown_pct = dd
 
     if ath_ts.tzinfo is None:
         ath_ts = ath_ts.replace(tzinfo=timezone.utc)
     max_drawdown_pct = max(0.0, min(max_drawdown_pct, 100.0))
 
-    # Average R by CLOSED LOSING POSITION.
-    close_wallet_running = start_wallet_est
-    close_wallet_by_ts: dict[datetime, float] = {}
-    for t in window_trades:
-        close_wallet_running += float(t.realized_pnl or 0)
-        close_wallet_by_ts[t.executed_at] = close_wallet_running
-
+    # Average R by CLOSED LOSING POSITION at close time (window filtered, history-based bankroll).
     losing_rs_pct: list[float] = []
     losing_pnls_usd: list[float] = []
     for cp in closed_positions:
         pnl = float(cp["realized_pnl"])
         if pnl >= 0:
             continue
-        wallet_at_close = float(close_wallet_by_ts.get(cp["closed_at"], close_wallet_running))
+        cts = cp["closed_at"]
+        if cts.tzinfo is None:
+            cts = cts.replace(tzinfo=timezone.utc)
+        wallet_at_close = float(close_wallet_by_ts.get(cts, current_wallet))
         denom = max(abs(wallet_at_close), 1e-9)
         losing_rs_pct.append(abs(pnl) / denom * 100)
         losing_pnls_usd.append(abs(pnl))

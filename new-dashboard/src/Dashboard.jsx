@@ -445,7 +445,7 @@ function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
         <Card label='GROSS LONG' value={`$${(risk?.gross_long_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#39ff14' />
         <Card label='GROSS SHORT' value={`$${(risk?.gross_short_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#ff3131' />
-        <Card label='AVG R LOSS (vs current balance)' value={`${Number(stats?.avg_r_loss_pct_current_balance ?? stats?.avg_r_loss_pct ?? 0).toFixed(2)}%`} color='#ff6b6b' />
+        <Card label='AVG R LOSS' value={`${Number(stats?.avg_r_loss_pct ?? 0).toFixed(2)}%`} color='#ff6b6b' />
         <Card label='AVG LOSS $ (closed pos)' value={`$${Number(stats?.avg_r_loss_usd ?? 0).toFixed(2)}`} color='#ff9f9f' />
       </div>
 
