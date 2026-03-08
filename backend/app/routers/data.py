@@ -88,26 +88,36 @@ def _aggregate_trade_fills(trades: list[Trade]) -> list[dict]:
     return out
 
 
-def _count_closed_positions(orders: list[dict]) -> int:
-    # Approximation from window-local trade flow:
-    # count transitions where symbol net position returns to/crosses zero.
-    net_by_symbol: dict[str, float] = defaultdict(float)
-    closed = 0
+def _extract_closed_positions(orders: list[dict]) -> list[dict]:
+    # Approximation from window-local flow:
+    # each time net qty crosses back through zero, we consider one closed position.
+    state: dict[str, dict] = defaultdict(lambda: {"net": 0.0, "cycle_pnl": 0.0})
+    closed: list[dict] = []
 
     for o in sorted(orders, key=lambda x: x["executed_at"]):
         symbol = o["symbol"]
         qty = float(o.get("qty") or 0)
+        pnl = float(o.get("realized_pnl") or 0)
         side = str(o.get("side") or "BUY").upper()
         signed = qty if side == "BUY" else -qty
 
-        prev = net_by_symbol[symbol]
+        st = state[symbol]
+        prev = st["net"]
         new = prev + signed
+        st["cycle_pnl"] += pnl
 
         crossed_zero = (prev > 0 and new <= 0) or (prev < 0 and new >= 0)
         if prev != 0 and crossed_zero:
-            closed += 1
+            closed.append(
+                {
+                    "symbol": symbol,
+                    "closed_at": o["executed_at"],
+                    "realized_pnl": st["cycle_pnl"],
+                }
+            )
+            st["cycle_pnl"] = 0.0
 
-        net_by_symbol[symbol] = new
+        st["net"] = new
 
     return closed
 
@@ -151,24 +161,60 @@ def get_stats_overview(
     total_realized_pnl = float(sum(float(t.realized_pnl or 0) for t in window_trades))
     aggregated_orders = _aggregate_trade_fills(window_trades)
     total_trades = len(aggregated_orders)
-    total_closed_trades = _count_closed_positions(aggregated_orders)
+
+    closed_positions = _extract_closed_positions(aggregated_orders)
+    total_closed_trades = len(closed_positions)
     equity = total_realized_pnl + total_unrealized_pnl
 
-    # Drawdown proxy computed on an equity baseline to avoid absurd percentages.
-    baseline_equity = float(account_balance_total or account_balance_wallet or 1.0)
-    running_equity = baseline_equity
-    peak = baseline_equity
+    # Reconstruct window wallet path from current wallet and realized pnl.
+    current_wallet = float(account_balance_wallet or 0.0)
+    start_wallet_est = current_wallet - total_realized_pnl
+
+    # Drawdown + ATH on reconstructed wallet curve.
+    running_wallet = start_wallet_est
+    peak_wallet = running_wallet
+    ath_wallet = running_wallet
+    ath_ts = since
     max_drawdown_pct = 0.0
+
     for t in window_trades:
-        running_equity += float(t.realized_pnl or 0)
-        if running_equity > peak:
-            peak = running_equity
-        if peak > 0:
-            dd = ((peak - running_equity) / peak) * 100
+        running_wallet += float(t.realized_pnl or 0)
+        if running_wallet > peak_wallet:
+            peak_wallet = running_wallet
+        if running_wallet > ath_wallet:
+            ath_wallet = running_wallet
+            ath_ts = t.executed_at
+
+        if peak_wallet > 0:
+            dd = ((peak_wallet - running_wallet) / peak_wallet) * 100
             if dd > max_drawdown_pct:
                 max_drawdown_pct = dd
 
     max_drawdown_pct = max(0.0, min(max_drawdown_pct, 100.0))
+
+    # Average R by CLOSED LOSING POSITION.
+    close_wallet_running = start_wallet_est
+    close_wallet_by_ts: dict[datetime, float] = {}
+    for t in window_trades:
+        close_wallet_running += float(t.realized_pnl or 0)
+        close_wallet_by_ts[t.executed_at] = close_wallet_running
+
+    losing_rs_pct: list[float] = []
+    losing_pnls_usd: list[float] = []
+    for cp in closed_positions:
+        pnl = float(cp["realized_pnl"])
+        if pnl >= 0:
+            continue
+        wallet_at_close = float(close_wallet_by_ts.get(cp["closed_at"], close_wallet_running))
+        denom = max(abs(wallet_at_close), 1e-9)
+        losing_rs_pct.append(abs(pnl) / denom * 100)
+        losing_pnls_usd.append(abs(pnl))
+
+    avg_r_loss_pct = (sum(losing_rs_pct) / len(losing_rs_pct)) if losing_rs_pct else 0.0
+    avg_r_loss_usd = (sum(losing_pnls_usd) / len(losing_pnls_usd)) if losing_pnls_usd else 0.0
+
+    now = datetime.now(timezone.utc)
+    hours_since_ath = max(0.0, (now - ath_ts).total_seconds() / 3600)
 
     return {
         "total_trades": total_trades,
@@ -181,6 +227,11 @@ def get_stats_overview(
         "account_balance_wallet": account_balance_wallet,
         "margin_used_positions": round(margin_used_positions, 8),
         "max_drawdown_pct": round(max_drawdown_pct, 2),
+        "last_ath_balance": round(ath_wallet, 8),
+        "hours_since_last_ath": round(hours_since_ath, 2),
+        "avg_r_loss_pct": round(avg_r_loss_pct, 4),
+        "avg_r_loss_usd": round(avg_r_loss_usd, 8),
+        "losing_closed_positions": len(losing_rs_pct),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 

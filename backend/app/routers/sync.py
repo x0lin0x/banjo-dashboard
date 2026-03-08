@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -6,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.models.account_snapshot import AccountSnapshot
+from app.models.position import Position
 from app.models.sync_event import SyncEvent
 from app.security import require_sync_access
 from app.services.binance_sync import binance_sync_service
@@ -67,6 +70,29 @@ def _log_sync_event(
     db.commit()
 
 
+def _snapshot_account_state(db: Session) -> None:
+    wallet = binance_sync_service.fetch_account_balance(asset="USDT")
+
+    active_positions = [p for p in db.query(Position).all() if abs(float(p.position_amt or 0)) > 0]
+    margin_used = 0.0
+    for p in active_positions:
+        notional = abs(float(p.position_amt) * float(p.mark_price))
+        lev = max(int(p.leverage or 1), 1)
+        margin_used += (notional / lev)
+
+    wallet_f = float(wallet) if wallet is not None else None
+    equity_total = (wallet_f + margin_used) if wallet_f is not None else None
+
+    snap = AccountSnapshot(
+        wallet_balance=Decimal(str(wallet_f)) if wallet_f is not None else None,
+        margin_used=Decimal(str(margin_used)),
+        equity_total=Decimal(str(equity_total)) if equity_total is not None else None,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(snap)
+    db.commit()
+
+
 @router.post("/trades")
 def sync_trades(
     request: Request,
@@ -82,6 +108,10 @@ def sync_trades(
     try:
         _enforce_rate_limit(endpoint, actor)
         inserted = binance_sync_service.sync_trades(db=db, symbol=symbol.upper(), limit=limit)
+        try:
+            _snapshot_account_state(db)
+        except Exception:
+            pass
         _log_sync_event(db, endpoint, actor, "ok", None, symbol.upper(), int((time.time() - started) * 1000))
         return {"status": "ok", "type": "trades", "symbol": symbol.upper(), "inserted": inserted}
     except Exception as exc:
@@ -102,6 +132,10 @@ def sync_positions(
     try:
         _enforce_rate_limit(endpoint, actor)
         updated = binance_sync_service.sync_positions(db=db)
+        try:
+            _snapshot_account_state(db)
+        except Exception:
+            pass
         _log_sync_event(db, endpoint, actor, "ok", None, None, int((time.time() - started) * 1000))
         return {"status": "ok", "type": "positions", "updated": updated}
     except Exception as exc:
@@ -125,6 +159,10 @@ def sync_all(
         _enforce_rate_limit(endpoint, actor)
         inserted = binance_sync_service.sync_trades(db=db, symbol=symbol.upper(), limit=limit)
         updated = binance_sync_service.sync_positions(db=db)
+        try:
+            _snapshot_account_state(db)
+        except Exception:
+            pass
         _log_sync_event(db, endpoint, actor, "ok", None, symbol.upper(), int((time.time() - started) * 1000))
         return {"status": "ok", "symbol": symbol.upper(), "trades_inserted": inserted, "positions_updated": updated}
     except Exception as exc:
