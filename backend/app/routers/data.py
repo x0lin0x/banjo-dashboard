@@ -183,13 +183,18 @@ def get_stats_overview(
             peak_wallet = running_wallet
         if running_wallet > ath_wallet:
             ath_wallet = running_wallet
-            ath_ts = t.executed_at
+            ts = t.executed_at
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            ath_ts = ts
 
         if peak_wallet > 0:
             dd = ((peak_wallet - running_wallet) / peak_wallet) * 100
             if dd > max_drawdown_pct:
                 max_drawdown_pct = dd
 
+    if ath_ts.tzinfo is None:
+        ath_ts = ath_ts.replace(tzinfo=timezone.utc)
     max_drawdown_pct = max(0.0, min(max_drawdown_pct, 100.0))
 
     # Average R by CLOSED LOSING POSITION.
