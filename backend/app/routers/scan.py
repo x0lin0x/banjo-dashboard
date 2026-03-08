@@ -1,8 +1,11 @@
 from datetime import datetime, timedelta, timezone
+import os
+from pathlib import Path
 import time
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
+from app.config import settings
 from app.database import get_db
 from app.services.binance_sync import binance_sync_service
 from app.models.bot_heartbeat import BotHeartbeat
@@ -13,6 +16,25 @@ from app.models.trade import Trade
 from app.security import require_sync_access
 
 router = APIRouter(prefix="/api/v1", tags=["scan"])
+
+
+def _ensure_db_writable_or_503() -> None:
+    db_url = str(settings.database_url or "")
+    if not db_url.startswith("sqlite:///"):
+        return
+
+    db_path = db_url.replace("sqlite:///", "", 1)
+    p = Path(db_path)
+    if not p.is_absolute():
+        p = (Path.cwd() / p).resolve()
+
+    file_w = (not p.exists()) or os.access(p, os.W_OK)
+    dir_w = os.access(p.parent, os.W_OK)
+    if not (file_w and dir_w):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Database is readonly (path={p}, file_writable={file_w}, dir_writable={dir_w}).",
+        )
 
 
 def _safe_commit(db: Session) -> bool:
@@ -94,6 +116,7 @@ def scan_all_symbols(
     """
     started = time.time()
     try:
+        _ensure_db_writable_or_503()
         positions_updated = binance_sync_service.sync_positions(db=db)
 
         raw_positions = db.query(Position).all()

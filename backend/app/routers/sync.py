@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+import os
+from pathlib import Path
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -48,6 +50,25 @@ def _actor_from_request(request: Request) -> str:
         return f"token:{hash(token) % 100000}"
     host = request.client.host if request.client else "unknown"
     return f"ip:{host}"
+
+
+def _ensure_db_writable_or_503() -> None:
+    db_url = str(settings.database_url or "")
+    if not db_url.startswith("sqlite:///"):
+        return
+
+    db_path = db_url.replace("sqlite:///", "", 1)
+    p = Path(db_path)
+    if not p.is_absolute():
+        p = (Path.cwd() / p).resolve()
+
+    file_w = (not p.exists()) or os.access(p, os.W_OK)
+    dir_w = os.access(p.parent, os.W_OK)
+    if not (file_w and dir_w):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Database is readonly (path={p}, file_writable={file_w}, dir_writable={dir_w}).",
+        )
 
 
 def _safe_commit(db: Session) -> bool:
@@ -153,6 +174,7 @@ def sync_trades(
     endpoint = "sync/trades"
 
     try:
+        _ensure_db_writable_or_503()
         _enforce_rate_limit(endpoint, actor)
         inserted = binance_sync_service.sync_trades(db=db, symbol=symbol.upper(), limit=limit)
         try:
@@ -187,6 +209,7 @@ def sync_positions(
     endpoint = "sync/positions"
 
     try:
+        _ensure_db_writable_or_503()
         _enforce_rate_limit(endpoint, actor)
         updated = binance_sync_service.sync_positions(db=db)
         try:
@@ -223,6 +246,7 @@ def sync_all(
     endpoint = "sync/all"
 
     try:
+        _ensure_db_writable_or_503()
         _enforce_rate_limit(endpoint, actor)
         inserted = binance_sync_service.sync_trades(db=db, symbol=symbol.upper(), limit=limit)
         updated = binance_sync_service.sync_positions(db=db)
