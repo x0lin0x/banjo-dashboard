@@ -115,6 +115,8 @@ function Dashboard() {
   const [autoSyncSec, setAutoSyncSec] = useState(saved.autoSyncSec || 'off')
   const [alertThresholds, setAlertThresholds] = useState(saved.alertThresholds || DEFAULT_ALERT_THRESHOLDS)
   const [showSections, setShowSections] = useState(saved.showSections || DEFAULT_SHOW_SECTIONS)
+  const [defaultPreset, setDefaultPreset] = useState(saved.defaultPreset || 'Full')
+  const [quickMode, setQuickMode] = useState(saved.quickMode || false)
   const [syncToken, setSyncToken] = useState(saved.syncToken || '')
   const [symbolFilter, setSymbolFilter] = useState(saved.symbolFilter || '')
   const [tradeLimit, setTradeLimit] = useState(saved.tradeLimit || 25)
@@ -415,10 +417,12 @@ function Dashboard() {
       positionSortDir,
       syncToken,
       autoSyncSec,
-      showSections
+      showSections,
+      defaultPreset,
+      quickMode
     }
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(payload))
-  }, [windowFilter, refreshSec, alertThresholds, symbolFilter, tradeLimit, tradeSortBy, tradeSortDir, positionSideFilter, positionSortBy, positionSortDir, syncToken, autoSyncSec, showSections])
+  }, [windowFilter, refreshSec, alertThresholds, symbolFilter, tradeLimit, tradeSortBy, tradeSortDir, positionSideFilter, positionSortBy, positionSortDir, syncToken, autoSyncSec, showSections, defaultPreset, quickMode])
 
   const resetUiSettings = () => {
     localStorage.removeItem(SETTINGS_KEY)
@@ -436,7 +440,20 @@ function Dashboard() {
     setPositionSortDir('desc')
     setAutoSyncSec('off')
     setShowSections(DEFAULT_SHOW_SECTIONS)
+    setDefaultPreset('Full')
+    setQuickMode(false)
   }
+
+  useEffect(() => {
+    if (!quickMode) return
+
+    const hasOpsIssue = Number(execSummary?.error_events_1h ?? 0) > 0 || Number(execSummary?.missed_like_events ?? 0) > 0
+    if (hasOpsIssue) {
+      setShowSections(SECTION_PRESETS.Ops)
+    } else {
+      setShowSections(SECTION_PRESETS.Core)
+    }
+  }, [quickMode, execSummary?.error_events_1h, execSummary?.missed_like_events])
 
   return (
     <div style={{ minHeight: '100vh', background: '#0a0a0f', color: 'white', padding: 24 }}>
@@ -484,12 +501,27 @@ function Dashboard() {
         {Object.entries(SECTION_PRESETS).map(([name, conf]) => (
           <button
             key={name}
-            onClick={() => setShowSections(conf)}
+            onClick={() => {
+              setShowSections(conf)
+              setDefaultPreset(name)
+            }}
             style={{ background: '#1a1a2e', color: '#fff', border: '1px solid #2a2a3f', borderRadius: 999, padding: '4px 10px', fontSize: 12, fontWeight: 700 }}
           >
             {name}
           </button>
         ))}
+        <span style={{ marginLeft: 8 }}>Default:</span>
+        <select value={defaultPreset} onChange={(e) => {
+          const name = e.target.value
+          setDefaultPreset(name)
+          if (SECTION_PRESETS[name]) setShowSections(SECTION_PRESETS[name])
+        }} style={{ background: '#1a1a2e', border: '1px solid #2a2a3f', color: '#fff', borderRadius: 8, padding: '4px 8px' }}>
+          {Object.keys(SECTION_PRESETS).map((name) => (<option key={name} value={name}>{name}</option>))}
+        </select>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <input type='checkbox' checked={!!quickMode} onChange={(e) => setQuickMode(e.target.checked)} />
+          Quick mode
+        </label>
         <span style={{ marginLeft: 8 }}>Custom:</span>
         {Object.entries(showSections).map(([k, v]) => (
           <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
