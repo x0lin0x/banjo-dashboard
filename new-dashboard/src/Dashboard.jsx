@@ -113,6 +113,7 @@ function Dashboard() {
   const [syncErrorStreak, setSyncErrorStreak] = useState(0)
   const [autoSyncCooldownUntil, setAutoSyncCooldownUntil] = useState(null)
   const [heartbeatTestMsg, setHeartbeatTestMsg] = useState('')
+  const [execIngestTestMsg, setExecIngestTestMsg] = useState('')
 
   const [windowFilter, setWindowFilter] = useState(saved.windowFilter || '30d')
   const [refreshSec, setRefreshSec] = useState(saved.refreshSec || 'off')
@@ -244,6 +245,36 @@ function Dashboard() {
       loadBase()
     } catch (err) {
       setHeartbeatTestMsg(`Heartbeat test failed: ${err?.message || 'unknown error'}`)
+    }
+  }
+
+  const testExecutionIngest = async () => {
+    setExecIngestTestMsg('')
+    try {
+      const headers = { 'Content-Type': 'application/json' }
+      if (syncToken.trim()) headers['X-API-Token'] = syncToken.trim()
+
+      const res = await fetch(`${API_URL}/execution/events`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          source: 'dashboard-test',
+          event_type: 'smoke_test',
+          status: 'ok',
+          latency_ms: 1,
+          note: 'manual ui execution ingest test'
+        })
+      })
+
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}))
+        throw new Error(payload?.detail || `Execution ingest test failed (${res.status})`)
+      }
+
+      setExecIngestTestMsg('Execution ingest test OK')
+      loadExecutionEvents()
+    } catch (err) {
+      setExecIngestTestMsg(`Execution ingest test failed: ${err?.message || 'unknown error'}`)
     }
   }
 
@@ -693,7 +724,11 @@ function Dashboard() {
               <button onClick={testBotHeartbeat} style={{ background: '#8ab4ff', color: '#000', border: 'none', borderRadius: 8, padding: '6px 10px', fontWeight: 700 }}>
                 Test bot heartbeat
               </button>
+              <button onClick={testExecutionIngest} style={{ background: '#ffd166', color: '#000', border: 'none', borderRadius: 8, padding: '6px 10px', fontWeight: 700 }}>
+                Test execution ingest
+              </button>
               {heartbeatTestMsg && <span style={{ color: heartbeatTestMsg.includes('OK') ? '#39ff14' : '#ff6b6b', fontSize: 13 }}>{heartbeatTestMsg}</span>}
+              {execIngestTestMsg && <span style={{ color: execIngestTestMsg.includes('OK') ? '#39ff14' : '#ff6b6b', fontSize: 13 }}>{execIngestTestMsg}</span>}
             </div>
           </div>
         </>
