@@ -257,6 +257,67 @@ def execution_events(
     }
 
 
+@router.get("/execution/summary")
+def execution_summary(
+    window: str = Query(default="24h", pattern="^(24h|7d|30d)$"),
+    db: Session = Depends(get_db),
+):
+    since = datetime.now(timezone.utc) - _parse_window(window)
+    q = db.query(ExecutionEvent).filter(ExecutionEvent.created_at >= since)
+
+    total = q.count()
+    errors = q.filter(ExecutionEvent.status == "error").count()
+
+    lat_rows = (
+        q.filter(ExecutionEvent.status == "ok")
+        .filter(ExecutionEvent.latency_ms.isnot(None))
+        .all()
+    )
+    latencies = [int(r.latency_ms) for r in lat_rows if r.latency_ms is not None]
+    avg_latency_ms = (sum(latencies) / len(latencies)) if latencies else None
+
+    return {
+        "window": window,
+        "total_events": total,
+        "error_events": errors,
+        "avg_latency_ms": round(avg_latency_ms, 2) if avg_latency_ms is not None else None,
+    }
+
+
+@router.get("/execution/events")
+def execution_events(
+    limit: int = Query(default=20, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    status_value: str | None = Query(default=None, alias="status", pattern="^(ok|error)$"),
+    db: Session = Depends(get_db),
+):
+    q = db.query(ExecutionEvent)
+    if status_value:
+        q = q.filter(ExecutionEvent.status == status_value)
+
+    total = q.count()
+    rows = q.order_by(ExecutionEvent.created_at.desc()).offset(offset).limit(limit).all()
+
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "events": [
+            {
+                "id": e.id,
+                "source": e.source,
+                "symbol": e.symbol,
+                "event_type": e.event_type,
+                "status": e.status,
+                "latency_ms": e.latency_ms,
+                "error_message": e.error_message,
+                "created_at": _as_utc(e.created_at).isoformat() if e.created_at else None,
+            }
+            for e in rows
+        ],
+    }
+
+
 @router.get("/stats/overview")
 def get_stats_overview(
     window: str = Query(default="30d", pattern="^(24h|7d|30d)$"),

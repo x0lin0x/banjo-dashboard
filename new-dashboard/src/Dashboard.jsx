@@ -81,6 +81,8 @@ function Dashboard() {
   const [runtimeHealth, setRuntimeHealth] = useState(null)
   const [execSummary, setExecSummary] = useState(null)
   const [audit, setAudit] = useState(null)
+  const [execSummary, setExecSummary] = useState(null)
+  const [execEvents, setExecEvents] = useState([])
   const [auditTradesMeta, setAuditTradesMeta] = useState({ total: 0, limit: 25, offset: 0, checksum: '' })
   const [syncEvents, setSyncEvents] = useState([])
   const [syncEventsMeta, setSyncEventsMeta] = useState({ total: 0, limit: 8, offset: 0 })
@@ -159,6 +161,17 @@ function Dashboard() {
       })
   }
 
+  const loadExecutionEvents = () => {
+    fetch(`${API_URL}/execution/events?limit=8&offset=0`)
+      .then((r) => r.json())
+      .then((res) => {
+        setExecEvents(res?.events || [])
+      })
+      .catch(() => {
+        setExecEvents([])
+      })
+  }
+
   const loadSyncEvents = () => {
     const params = new URLSearchParams({
       limit: String(syncEventsMeta.limit),
@@ -222,6 +235,7 @@ function Dashboard() {
       loadTrades()
       loadAuditTradesMeta()
       loadSyncEvents()
+      loadExecutionEvents()
     } catch (err) {
       if (err?.name === 'AbortError') {
         setSyncError('Sync timeout after 90s. Reduce symbols or retry.')
@@ -239,6 +253,7 @@ function Dashboard() {
     loadTrades()
     loadAuditTradesMeta()
     loadSyncEvents()
+    loadExecutionEvents()
   }, [windowFilter])
 
   useEffect(() => {
@@ -265,6 +280,7 @@ function Dashboard() {
       loadTrades()
       loadAuditTradesMeta()
       loadSyncEvents()
+      loadExecutionEvents()
     }, ms)
     return () => clearInterval(id)
   }, [refreshSec, windowFilter, symbolFilter, tradeLimit, tradeOffset, tradeSortBy, tradeSortDir, auditTradesMeta.limit, auditTradesMeta.offset, syncEventsMeta.limit, syncEventsMeta.offset, syncEventsFilterEndpoint, syncEventsFilterStatus])
@@ -450,6 +466,41 @@ function Dashboard() {
         </div>
       </div>
 
+      <div style={panelStyle()}>
+        <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Execution quality ({windowFilter})</h3>
+        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', color: '#cfd3ff' }}>
+          <span>Total events: <strong>{execSummary?.total_events ?? 0}</strong></span>
+          <span>Errors: <strong style={{ color: '#ff6b6b' }}>{execSummary?.error_events ?? 0}</strong></span>
+          <span>Avg latency: <strong>{execSummary?.avg_latency_ms == null ? 'n/a' : `${Number(execSummary.avg_latency_ms).toFixed(0)} ms`}</strong></span>
+        </div>
+        <div style={{ marginTop: 10, overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ color: '#8b8ba7', textAlign: 'left', borderBottom: '1px solid #2a2a3f' }}>
+                <th style={{ padding: 8 }}>Time</th>
+                <th style={{ padding: 8 }}>Type</th>
+                <th style={{ padding: 8 }}>Status</th>
+                <th style={{ padding: 8 }}>Symbol</th>
+                <th style={{ padding: 8 }}>Latency</th>
+                <th style={{ padding: 8 }}>Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              {execEvents.map((e) => (
+                <tr key={e.id} style={{ borderBottom: '1px solid #1c1c2b' }}>
+                  <td style={{ padding: 8 }}>{e.created_at ? new Date(e.created_at).toLocaleString() : '-'}</td>
+                  <td style={{ padding: 8 }}>{e.event_type}</td>
+                  <td style={{ padding: 8, color: e.status === 'ok' ? '#39ff14' : '#ff6b6b' }}>{e.status}</td>
+                  <td style={{ padding: 8 }}>{e.symbol || '-'}</td>
+                  <td style={{ padding: 8 }}>{e.latency_ms ?? '-'} ms</td>
+                  <td style={{ padding: 8, color: '#b7bbd8' }}>{e.error_message || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 24 }}>
         <Card label='POSITIONS' value={stats?.total_positions ?? 0} color='#b026ff' />
         <Card label='CLOSED POSITIONS' value={stats?.total_closed_trades ?? stats?.total_trades ?? 0} color='#00f3ff' />
@@ -459,9 +510,16 @@ function Dashboard() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
         <Card label='BALANCE (wallet)' value={stats?.account_balance_wallet == null ? 'n/a' : `$${Number(stats.account_balance_wallet).toFixed(2)}`} color='#8ab4ff' />
+        <Card label='AVAILABLE (est.)' value={stats?.account_available_est == null ? 'n/a' : `$${Number(stats.account_available_est).toFixed(2)}`} color='#7ce0ff' />
+        <Card label='MARGIN USED' value={`$${Number(stats?.margin_used_positions ?? 0).toFixed(2)}`} color='#ffd166' />
         <Card label='MAX DD (window)' value={`${stats?.max_drawdown_pct ?? 0}%`} color={ddColor} />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
         <Card label='LAST ATH (proxy)' value={stats?.last_ath_balance == null ? 'n/a' : `$${Number(stats.last_ath_balance).toFixed(2)}`} color='#ffd166' />
         <Card label='HOURS SINCE ATH' value={`${Number(stats?.hours_since_last_ath ?? 0).toFixed(1)}h`} color='#c8c8ff' />
+        <Card label='GROSS LONG' value={`$${(risk?.gross_long_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#39ff14' />
+        <Card label='GROSS SHORT' value={`$${(risk?.gross_short_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#ff3131' />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
