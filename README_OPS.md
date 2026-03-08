@@ -1,4 +1,4 @@
-# Trading Dashboard — Ops Runbook (V1)
+# Trading Dashboard — Ops Runbook (V1.1)
 
 ## 1) Start / Stop
 
@@ -75,7 +75,7 @@ Wait `SYNC_MIN_INTERVAL_SECONDS` before retrying same endpoint/actor.
 - [ ] audit CSV export works
 - [ ] sync events CSV export works
 
-For full manual QA, use `QA_CHECKLIST_V1.md`.
+For full manual QA, use `QA_CHECKLIST_V1_1.md`.
 
 Automated smoke (API):
 ```bash
@@ -90,6 +90,10 @@ cd /home/guts/.openclaw/workspace/trading-dashboard
 chmod +x scripts/qa_metrics_sanity_v1_1.sh
 BASE_URL=http://localhost:8000 ./scripts/qa_metrics_sanity_v1_1.sh
 ```
+
+Proxy metrics note:
+- Some metrics can be `proxy` depending on available source data (`data_quality` field in `/stats/overview`).
+- Typical proxy candidates: R-metrics without enough snapshots, exit distribution without explicit exit_reason ingestion.
 
 ---
 
