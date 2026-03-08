@@ -11,6 +11,15 @@ const DEFAULT_ALERT_THRESHOLDS = {
   feeDragPct: 15
 }
 
+const DEFAULT_SHOW_SECTIONS = {
+  health: true,
+  execution: true,
+  riskPerf: true,
+  alerts: true,
+  market: true,
+  tables: true
+}
+
 function Card({ label, value, color = '#b026ff' }) {
   return (
     <div style={{ background: '#1a1a2e', border: `1px solid ${color}`, padding: 20, borderRadius: 12, boxShadow: `0 0 16px ${color}33` }}>
@@ -99,6 +108,7 @@ function Dashboard() {
   const [refreshSec, setRefreshSec] = useState(saved.refreshSec || 'off')
   const [autoSyncSec, setAutoSyncSec] = useState(saved.autoSyncSec || 'off')
   const [alertThresholds, setAlertThresholds] = useState(saved.alertThresholds || DEFAULT_ALERT_THRESHOLDS)
+  const [showSections, setShowSections] = useState(saved.showSections || DEFAULT_SHOW_SECTIONS)
   const [syncToken, setSyncToken] = useState(saved.syncToken || '')
   const [symbolFilter, setSymbolFilter] = useState(saved.symbolFilter || '')
   const [tradeLimit, setTradeLimit] = useState(saved.tradeLimit || 25)
@@ -398,10 +408,11 @@ function Dashboard() {
       positionSortBy,
       positionSortDir,
       syncToken,
-      autoSyncSec
+      autoSyncSec,
+      showSections
     }
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(payload))
-  }, [windowFilter, refreshSec, alertThresholds, symbolFilter, tradeLimit, tradeSortBy, tradeSortDir, positionSideFilter, positionSortBy, positionSortDir, syncToken, autoSyncSec])
+  }, [windowFilter, refreshSec, alertThresholds, symbolFilter, tradeLimit, tradeSortBy, tradeSortDir, positionSideFilter, positionSortBy, positionSortDir, syncToken, autoSyncSec, showSections])
 
   const resetUiSettings = () => {
     localStorage.removeItem(SETTINGS_KEY)
@@ -418,6 +429,7 @@ function Dashboard() {
     setPositionSortBy('notional_usd')
     setPositionSortDir('desc')
     setAutoSyncSec('off')
+    setShowSections(DEFAULT_SHOW_SECTIONS)
   }
 
   return (
@@ -461,6 +473,15 @@ function Dashboard() {
         </div>
       </div>
 
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 10, color: '#b7bbd8', fontSize: 13 }}>
+        {Object.entries(showSections).map(([k, v]) => (
+          <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type='checkbox' checked={!!v} onChange={(e) => setShowSections((p) => ({ ...p, [k]: e.target.checked }))} />
+            {k}
+          </label>
+        ))}
+      </div>
+
       {((diag && !diag?.sync?.can_sync) || syncError) && (
         <div style={{ ...panelStyle(), border: '1px solid #ff6b6b' }}>
           {(diag && !diag?.sync?.can_sync) && (
@@ -482,35 +503,41 @@ function Dashboard() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
-        <Card label='BOT STATUS' value={(runtimeHealth?.bot_status || 'unknown').toUpperCase()} color={runtimeHealth?.bot_status === 'running' ? '#39ff14' : runtimeHealth?.bot_status === 'degraded' ? '#ffd166' : '#ff6b6b'} />
-        <Card label='HB AGE' value={runtimeHealth?.heartbeat_age_sec == null ? 'n/a' : `${runtimeHealth.heartbeat_age_sec}s`} color='#8ab4ff' />
-        <Card label='OPEN POSITIONS' value={runtimeHealth?.open_positions_count ?? 0} color='#b026ff' />
-        <Card label='API ERRORS (24h)' value={runtimeHealth?.api_errors_24h ?? 0} color={Number(runtimeHealth?.api_errors_24h ?? 0) > 0 ? '#ff6b6b' : '#39ff14'} />
-      </div>
+      {showSections.health && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
+            <Card label='BOT STATUS' value={(runtimeHealth?.bot_status || 'unknown').toUpperCase()} color={runtimeHealth?.bot_status === 'running' ? '#39ff14' : runtimeHealth?.bot_status === 'degraded' ? '#ffd166' : '#ff6b6b'} />
+            <Card label='HB AGE' value={runtimeHealth?.heartbeat_age_sec == null ? 'n/a' : `${runtimeHealth.heartbeat_age_sec}s`} color='#8ab4ff' />
+            <Card label='OPEN POSITIONS' value={runtimeHealth?.open_positions_count ?? 0} color='#b026ff' />
+            <Card label='API ERRORS (24h)' value={runtimeHealth?.api_errors_24h ?? 0} color={Number(runtimeHealth?.api_errors_24h ?? 0) > 0 ? '#ff6b6b' : '#39ff14'} />
+          </div>
 
+          <div style={panelStyle()}>
+            <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Runtime diagnostics</h3>
+            <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', color: '#cfd3ff' }}>
+              <span>Last sync: <strong>{diag?.sync?.last_sync_at ? new Date(diag.sync.last_sync_at).toLocaleString() : 'n/a'}</strong></span>
+              <span>DB latency: <strong>{diag?.db?.latency_ms ?? 'n/a'} ms</strong></span>
+              <span>Server time: <strong>{diag?.sync?.server_time ? new Date(diag.sync.server_time).toLocaleString() : 'n/a'}</strong></span>
+              <span>Min sync interval: <strong>{diag?.sync?.min_interval_seconds ?? 'n/a'}s</strong></span>
+            </div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 10, color: '#b7bbd8' }}>
+              <span>Data quality:</span>
+              <span>R loss <strong>{stats?.data_quality?.avg_r_loss || 'n/a'}</strong></span>
+              <span>R by trade <strong>{stats?.data_quality?.avg_r_by_trade || 'n/a'}</strong></span>
+              <span>Exit dist <strong>{stats?.data_quality?.exit_distribution || 'n/a'}</strong></span>
+              <span>Funding <strong>{stats?.data_quality?.funding_fees || 'n/a'}</strong></span>
+            </div>
+          </div>
+        </>
+      )}
+
+      {showSections.execution && (
+        <>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
         <Card label='EXEC EVENTS' value={execSummary?.total_events ?? 0} color='#8ab4ff' />
         <Card label='MISSED-LIKE (window)' value={execSummary?.missed_like_events ?? 0} color={Number(execSummary?.missed_like_events ?? 0) > 0 ? '#ff6b6b' : '#ffd166'} />
         <Card label='EXEC ERRORS (1h)' value={execSummary?.error_events_1h ?? 0} color={Number(execSummary?.error_events_1h ?? 0) > 0 ? '#ff6b6b' : '#39ff14'} />
         <Card label='AVG EXEC LATENCY' value={execSummary?.avg_latency_ms == null ? 'n/a' : `${Number(execSummary.avg_latency_ms).toFixed(0)}ms`} color='#c8c8ff' />
-      </div>
-
-      <div style={panelStyle()}>
-        <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Runtime diagnostics</h3>
-        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', color: '#cfd3ff' }}>
-          <span>Last sync: <strong>{diag?.sync?.last_sync_at ? new Date(diag.sync.last_sync_at).toLocaleString() : 'n/a'}</strong></span>
-          <span>DB latency: <strong>{diag?.db?.latency_ms ?? 'n/a'} ms</strong></span>
-          <span>Server time: <strong>{diag?.sync?.server_time ? new Date(diag.sync.server_time).toLocaleString() : 'n/a'}</strong></span>
-          <span>Min sync interval: <strong>{diag?.sync?.min_interval_seconds ?? 'n/a'}s</strong></span>
-        </div>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 10, color: '#b7bbd8' }}>
-          <span>Data quality:</span>
-          <span>R loss <strong>{stats?.data_quality?.avg_r_loss || 'n/a'}</strong></span>
-          <span>R by trade <strong>{stats?.data_quality?.avg_r_by_trade || 'n/a'}</strong></span>
-          <span>Exit dist <strong>{stats?.data_quality?.exit_distribution || 'n/a'}</strong></span>
-          <span>Funding <strong>{stats?.data_quality?.funding_fees || 'n/a'}</strong></span>
-        </div>
       </div>
 
       <div style={panelStyle()}>
@@ -581,6 +608,11 @@ function Dashboard() {
         </div>
       </div>
 
+      </>
+      )}
+
+      {showSections.riskPerf && (
+        <>
       <div style={panelStyle()}>
         <h3 style={{ marginTop: 0, color: '#ffd166' }}>Risk strip</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
@@ -694,7 +726,10 @@ function Dashboard() {
         <Card label='EXIT OTHER' value={`${Number(stats?.exit_other_count ?? 0)}`} color='#ffd166' />
         <Card label='EXIT SOURCE' value={`${stats?.exit_reason_source || 'n/a'}`} color='#8ab4ff' />
       </div>
+      </>
+      )}
 
+      {showSections.alerts && (
       <div style={panelStyle()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <h3 style={{ marginTop: 0, color: '#ffd166', marginBottom: 0 }}>Alerts</h3>
@@ -714,7 +749,10 @@ function Dashboard() {
           ))}
         </ul>
       </div>
+      )}
 
+      {showSections.market && (
+      <>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18, marginTop: 18 }}>
         <Card label='GROSS LONG' value={`$${(risk?.gross_long_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#39ff14' />
         <Card label='GROSS SHORT' value={`$${(risk?.gross_short_usd ?? 0).toFixed?.(2) ?? '0.00'}`} color='#ff3131' />
@@ -738,6 +776,10 @@ function Dashboard() {
         </div>
       </div>
 
+      </>
+      )}
+
+      {showSections.tables && (
       <div style={panelStyle()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <h3 style={{ margin: 0, color: '#c8c8ff' }}>Trades</h3>
@@ -1015,6 +1057,7 @@ function Dashboard() {
           </div>
         </div>
       </div>
+      )}
     </div>
   )
 }
