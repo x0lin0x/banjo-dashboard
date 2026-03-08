@@ -224,6 +224,37 @@ def get_stats_overview(
         ath_ts = ath_ts.replace(tzinfo=timezone.utc)
     max_drawdown_pct = max(0.0, min(max_drawdown_pct, 100.0))
 
+    # Closed-position split metrics (window)
+    closed_long = [cp for cp in closed_positions if cp.get("direction") == "LONG"]
+    closed_short = [cp for cp in closed_positions if cp.get("direction") == "SHORT"]
+
+    def _win_rate(rows: list[dict]) -> float:
+        if not rows:
+            return 0.0
+        wins = sum(1 for r in rows if float(r.get("realized_pnl") or 0) > 0)
+        return wins / len(rows) * 100
+
+    win_rate_long = _win_rate(closed_long)
+    win_rate_short = _win_rate(closed_short)
+
+    holding_secs = []
+    for cp in closed_positions:
+        o = cp.get("opened_at")
+        c = cp.get("closed_at")
+        if not o or not c:
+            continue
+        dt = (_as_utc(c) - _as_utc(o)).total_seconds()
+        if dt >= 0:
+            holding_secs.append(dt)
+
+    avg_holding_seconds = (sum(holding_secs) / len(holding_secs)) if holding_secs else 0.0
+    avg_holding_hours = avg_holding_seconds / 3600 if avg_holding_seconds else 0.0
+
+    # Exit reason distribution (proxy until explicit exit_reason is ingested).
+    exit_tp_like = sum(1 for cp in closed_positions if float(cp.get("realized_pnl") or 0) > 0)
+    exit_sl_like = sum(1 for cp in closed_positions if float(cp.get("realized_pnl") or 0) < 0)
+    exit_other = max(0, len(closed_positions) - exit_tp_like - exit_sl_like)
+
     # Average R by CLOSED LOSING POSITION at close time.
     # Preferred source = account snapshots (verified). Fallback = reconstructed wallet curve.
     snaps = db.query(AccountSnapshot).order_by(AccountSnapshot.created_at.asc()).all()
@@ -328,6 +359,14 @@ def get_stats_overview(
         "avg_r_loss_pct_current_balance": round(avg_r_loss_pct_current_balance, 4),
         "avg_r_loss_usd": round(avg_r_loss_usd, 8),
         "losing_closed_positions": len(losing_pnls_usd),
+        "win_rate_long_pct": round(win_rate_long, 2),
+        "win_rate_short_pct": round(win_rate_short, 2),
+        "avg_holding_hours": round(avg_holding_hours, 2),
+        "avg_holding_seconds": int(avg_holding_seconds),
+        "exit_reason_source": "proxy",
+        "exit_tp_like_count": int(exit_tp_like),
+        "exit_sl_like_count": int(exit_sl_like),
+        "exit_other_count": int(exit_other),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 

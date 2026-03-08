@@ -456,6 +456,20 @@ function Dashboard() {
         <Card label='R BY TRADE SOURCE' value={`${stats?.avg_r_by_trade_source || 'n/a'}`} color='#8ab4ff' />
       </div>
 
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
+        <Card label='WIN RATE LONG' value={`${Number(stats?.win_rate_long_pct ?? 0).toFixed(1)}%`} color='#39ff14' />
+        <Card label='WIN RATE SHORT' value={`${Number(stats?.win_rate_short_pct ?? 0).toFixed(1)}%`} color='#ff6b6b' />
+        <Card label='AVG HOLDING TIME' value={`${Number(stats?.avg_holding_hours ?? 0).toFixed(2)}h`} color='#ffd166' />
+        <Card label='CLOSED POSITIONS (window)' value={`${Number(stats?.total_closed_trades ?? 0)}`} color='#c8c8ff' />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, marginTop: 18 }}>
+        <Card label='EXIT TP-LIKE' value={`${Number(stats?.exit_tp_like_count ?? 0)}`} color='#39ff14' />
+        <Card label='EXIT SL-LIKE' value={`${Number(stats?.exit_sl_like_count ?? 0)}`} color='#ff6b6b' />
+        <Card label='EXIT OTHER' value={`${Number(stats?.exit_other_count ?? 0)}`} color='#ffd166' />
+        <Card label='EXIT SOURCE' value={`${stats?.exit_reason_source || 'n/a'}`} color='#8ab4ff' />
+      </div>
+
       <div style={panelStyle()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <h3 style={{ marginTop: 0, color: '#ffd166', marginBottom: 0 }}>Alerts</h3>
