@@ -117,6 +117,9 @@ function Dashboard() {
   const [showSections, setShowSections] = useState(saved.showSections || DEFAULT_SHOW_SECTIONS)
   const [defaultPreset, setDefaultPreset] = useState(saved.defaultPreset || 'Full')
   const [quickMode, setQuickMode] = useState(saved.quickMode || false)
+  const [opsAlert, setOpsAlert] = useState(null)
+  const [opsAlertAck, setOpsAlertAck] = useState(false)
+  const [opsIncidentLog, setOpsIncidentLog] = useState(saved.opsIncidentLog || [])
   const [syncToken, setSyncToken] = useState(saved.syncToken || '')
   const [symbolFilter, setSymbolFilter] = useState(saved.symbolFilter || '')
   const [tradeLimit, setTradeLimit] = useState(saved.tradeLimit || 25)
@@ -419,10 +422,11 @@ function Dashboard() {
       autoSyncSec,
       showSections,
       defaultPreset,
-      quickMode
+      quickMode,
+      opsIncidentLog
     }
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(payload))
-  }, [windowFilter, refreshSec, alertThresholds, symbolFilter, tradeLimit, tradeSortBy, tradeSortDir, positionSideFilter, positionSortBy, positionSortDir, syncToken, autoSyncSec, showSections, defaultPreset, quickMode])
+  }, [windowFilter, refreshSec, alertThresholds, symbolFilter, tradeLimit, tradeSortBy, tradeSortDir, positionSideFilter, positionSortBy, positionSortDir, syncToken, autoSyncSec, showSections, defaultPreset, quickMode, opsIncidentLog])
 
   const resetUiSettings = () => {
     localStorage.removeItem(SETTINGS_KEY)
@@ -442,16 +446,35 @@ function Dashboard() {
     setShowSections(DEFAULT_SHOW_SECTIONS)
     setDefaultPreset('Full')
     setQuickMode(false)
+    setOpsAlert(null)
+    setOpsAlertAck(false)
+    setOpsIncidentLog([])
   }
 
   useEffect(() => {
-    if (!quickMode) return
+    if (!quickMode) {
+      setOpsAlert(null)
+      return
+    }
 
-    const hasOpsIssue = Number(execSummary?.error_events_1h ?? 0) > 0 || Number(execSummary?.missed_like_events ?? 0) > 0
+    const errors1h = Number(execSummary?.error_events_1h ?? 0)
+    const missed = Number(execSummary?.missed_like_events ?? 0)
+    const hasOpsIssue = errors1h > 0 || missed > 0
+
     if (hasOpsIssue) {
       setShowSections(SECTION_PRESETS.Ops)
+
+      const reason = `errors_1h=${errors1h}, missed_like=${missed}`
+      setOpsAlert({ reason, at: new Date().toISOString() })
+      setOpsAlertAck(false)
+
+      setOpsIncidentLog((prev) => {
+        const row = { at: new Date().toISOString(), reason }
+        return [row, ...(prev || [])].slice(0, 30)
+      })
     } else {
       setShowSections(SECTION_PRESETS.Core)
+      setOpsAlert(null)
     }
   }, [quickMode, execSummary?.error_events_1h, execSummary?.missed_like_events])
 
@@ -531,6 +554,22 @@ function Dashboard() {
         ))}
       </div>
 
+      {quickMode && opsAlert && !opsAlertAck && (
+        <div style={{ ...panelStyle(), border: '1px solid #ff6b6b', background: '#2b1212' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <strong style={{ color: '#ff6b6b' }}>Quick mode switched to OPS:</strong> {opsAlert.reason}
+            </div>
+            <button
+              onClick={() => setOpsAlertAck(true)}
+              style={{ background: '#ff6b6b', color: '#000', border: 'none', borderRadius: 8, padding: '6px 10px', fontWeight: 700 }}
+            >
+              Acknowledge
+            </button>
+          </div>
+        </div>
+      )}
+
       {((diag && !diag?.sync?.can_sync) || syncError) && (
         <div style={{ ...panelStyle(), border: '1px solid #ff6b6b' }}>
           {(diag && !diag?.sync?.can_sync) && (
@@ -549,6 +588,19 @@ function Dashboard() {
           {autoSyncCooldownUntil && Date.now() < autoSyncCooldownUntil && (
             <div><strong style={{ color: '#ffd166' }}>Auto-sync cooldown:</strong> active until {new Date(autoSyncCooldownUntil).toLocaleTimeString()} after repeated sync errors.</div>
           )}
+        </div>
+      )}
+
+      {quickMode && opsIncidentLog?.length > 0 && (
+        <div style={{ ...panelStyle(), marginTop: 10 }}>
+          <h3 style={{ marginTop: 0, color: '#c8c8ff' }}>Ops incidents (recent)</h3>
+          <ul style={{ margin: 0, paddingLeft: 18, color: '#b7bbd8' }}>
+            {opsIncidentLog.slice(0, 5).map((it, idx) => (
+              <li key={`${it.at}-${idx}`} style={{ marginBottom: 4 }}>
+                <strong>{new Date(it.at).toLocaleTimeString()}</strong> — {it.reason}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
