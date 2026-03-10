@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bar, BarChart, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
-const API_URL = 'http://localhost:8000/api/v1'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
 const SETTINGS_KEY = 'banjo-dashboard-settings-v1'
 
 const DEFAULT_ALERT_THRESHOLDS = {
