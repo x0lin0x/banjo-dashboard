@@ -54,6 +54,22 @@ curl -X POST "http://localhost:8000/api/v1/sync/all?symbol=BTCUSDT&limit=100" \
 ### C) Rate limit 429
 Wait `SYNC_MIN_INTERVAL_SECONDS` before retrying same endpoint/actor.
 
+### D) 7D positions lower than Binance UI
+Typical cause: incomplete symbol coverage in local sync.
+Run an extended scan:
+```bash
+curl -X POST "http://localhost:8000/api/v1/sync/scan-all-symbols?limit=200&lookback_days=7&max_recent_symbols=120&include_income_discovery=true&max_income_pages=30&per_symbol_delay_ms=200" \
+  -H "X-API-Token: <your-token>"
+```
+Then re-check 7D metrics.
+
+### E) Historical gaps (missing Feb/older)
+Use historical backfill:
+```bash
+curl -X POST "http://localhost:8000/api/v1/sync/backfill-trades?symbols=BTCUSDT,ETHUSDT,SOLUSDT&days=90&limit=1000&max_pages_per_symbol=200" \
+  -H "X-API-Token: <your-token>"
+```
+
 ---
 
 ## 4) Token rotation

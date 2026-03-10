@@ -1,4 +1,4 @@
-import { IconBug } from '@tabler/icons';
+import { IconBug } from '@tabler/icons-react';
 
 const trading = {
   id: 'trading',

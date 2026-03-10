@@ -49,7 +49,13 @@ class HeartbeatIn(BaseModel):
 
 
 def _parse_window(window: str) -> timedelta:
-    mapping = {"24h": timedelta(hours=24), "7d": timedelta(days=7), "30d": timedelta(days=30)}
+    mapping = {
+        "24h": timedelta(hours=24),
+        "7d": timedelta(days=7),
+        "30d": timedelta(days=30),
+        "90d": timedelta(days=90),
+        "all": timedelta(days=36500),
+    }
     return mapping.get(window, timedelta(days=30))
 
 
@@ -302,7 +308,7 @@ def diagnostics_db_writable():
 
 @router.get("/product/readiness")
 def product_readiness(
-    window: str = Query(default="7d", pattern="^(24h|7d|30d)$"),
+    window: str = Query(default="7d", pattern="^(24h|7d|30d|90d|all)$"),
     db: Session = Depends(get_db),
 ):
     now = datetime.now(timezone.utc)
@@ -372,36 +378,11 @@ def product_readiness(
     }
 
 
-@router.get("/execution/summary")
-def execution_summary(
-    window: str = Query(default="24h", pattern="^(24h|7d|30d)$"),
-    db: Session = Depends(get_db),
-):
-    since = datetime.now(timezone.utc) - _parse_window(window)
-    q = db.query(ExecutionEvent).filter(ExecutionEvent.created_at >= since)
-
-    total = q.count()
-    errors = q.filter(ExecutionEvent.status == "error").count()
-    missed = q.filter(ExecutionEvent.event_type == "missed").count()
-
-    latency_vals = [r[0] for r in q.with_entities(ExecutionEvent.latency_ms).all() if r[0] is not None]
-    avg_latency_ms = (sum(latency_vals) / len(latency_vals)) if latency_vals else None
-
-    return {
-        "window": window,
-        "total_events": total,
-        "errors": int(errors),
-        "missed": int(missed),
-        "avg_latency_ms": round(avg_latency_ms, 2) if avg_latency_ms is not None else None,
-        "source": "exact",
-    }
-
-
 @router.get("/execution/events")
 def execution_events(
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-    window: str = Query(default="24h", pattern="^(24h|7d|30d)$"),
+    window: str = Query(default="24h", pattern="^(24h|7d|30d|90d|all)$"),
     status_value: str | None = Query(default=None, alias="status", pattern="^(ok|error)$"),
     db: Session = Depends(get_db),
 ):
@@ -436,26 +417,30 @@ def execution_events(
 
 @router.get("/execution/summary")
 def execution_summary(
-    window: str = Query(default="24h", pattern="^(24h|7d|30d)$"),
+    window: str = Query(default="24h", pattern="^(24h|7d|30d|90d|all)$"),
     db: Session = Depends(get_db),
 ):
-    since = datetime.now(timezone.utc) - _parse_window(window)
-    q = db.query(ExecutionEvent).filter(ExecutionEvent.created_at >= since)
+    now_utc = datetime.now(timezone.utc)
+    since = now_utc - _parse_window(window)
+    q = db.query(ExecutionEvent).filter(ExecutionEvent.created_at >= since, ExecutionEvent.created_at <= now_utc)
 
     total = q.count()
     errors = q.filter(ExecutionEvent.status == "error").count()
-    since_1h = datetime.now(timezone.utc) - timedelta(hours=1)
+    missed = q.filter(ExecutionEvent.event_type == "missed").count()
+
+    oldest_in_window = q.with_entities(func.min(ExecutionEvent.created_at)).scalar()
+    newest_in_window = q.with_entities(func.max(ExecutionEvent.created_at)).scalar()
+    oldest_all = db.query(func.min(ExecutionEvent.created_at)).scalar()
+    newest_all = db.query(func.max(ExecutionEvent.created_at)).scalar()
+
+    since_1h = now_utc - timedelta(hours=1)
     errors_1h = (
         db.query(func.count(ExecutionEvent.id))
         .filter(ExecutionEvent.created_at >= since_1h)
+        .filter(ExecutionEvent.created_at <= now_utc)
         .filter(ExecutionEvent.status == "error")
         .scalar()
     ) or 0
-    missed_like = (
-        q.filter(ExecutionEvent.status == "error")
-        .filter(ExecutionEvent.event_type.in_(["sync/all", "sync/trades", "sync/scan-all-symbols"]))
-        .count()
-    )
 
     lat_rows = (
         q.filter(ExecutionEvent.status == "ok")
@@ -463,6 +448,41 @@ def execution_summary(
         .all()
     )
     latencies = sorted([int(r.latency_ms) for r in lat_rows if r.latency_ms is not None])
+
+    source = "exact_window"
+
+    # Fallback: if execution_events coverage does not reach requested window,
+    # use sync_events so 7d/30d reflect actual historical operations.
+    if (oldest_all is None) or (_as_utc(oldest_all) > since):
+        sq = db.query(SyncEvent).filter(SyncEvent.created_at >= since, SyncEvent.created_at <= now_utc)
+        total = sq.count()
+        errors = sq.filter(SyncEvent.status == "error").count()
+        missed = (
+            sq.filter(SyncEvent.status == "error")
+            .filter(SyncEvent.endpoint.in_(["sync/all", "sync/trades", "sync/scan-all-symbols"]))
+            .count()
+        )
+
+        errors_1h = (
+            db.query(func.count(SyncEvent.id))
+            .filter(SyncEvent.created_at >= since_1h)
+            .filter(SyncEvent.created_at <= now_utc)
+            .filter(SyncEvent.status == "error")
+            .scalar()
+        ) or 0
+
+        slat_rows = (
+            sq.filter(SyncEvent.status == "ok")
+            .filter(SyncEvent.duration_ms.isnot(None))
+            .all()
+        )
+        latencies = sorted([int(r.duration_ms) for r in slat_rows if r.duration_ms is not None])
+
+        oldest_in_window = sq.with_entities(func.min(SyncEvent.created_at)).scalar()
+        newest_in_window = sq.with_entities(func.max(SyncEvent.created_at)).scalar()
+        oldest_all = db.query(func.min(SyncEvent.created_at)).scalar()
+        newest_all = db.query(func.max(SyncEvent.created_at)).scalar()
+        source = "sync_events_fallback"
 
     def _pct(vals: list[int], p: float):
         if not vals:
@@ -477,19 +497,25 @@ def execution_summary(
 
     return {
         "window": window,
+        "since": since.isoformat(),
         "total_events": total,
-        "error_events": errors,
+        "errors": int(errors),
+        "missed": int(missed),
         "error_events_1h": int(errors_1h),
-        "missed_like_events": int(missed_like),
         "avg_latency_ms": round(avg_latency_ms, 2) if avg_latency_ms is not None else None,
         "p50_latency_ms": p50_latency_ms,
         "p95_latency_ms": p95_latency_ms,
+        "oldest_event_at": _as_utc(oldest_in_window).isoformat() if oldest_in_window else None,
+        "newest_event_at": _as_utc(newest_in_window).isoformat() if newest_in_window else None,
+        "oldest_event_all_time": _as_utc(oldest_all).isoformat() if oldest_all else None,
+        "newest_event_all_time": _as_utc(newest_all).isoformat() if newest_all else None,
+        "source": source,
     }
 
 
 @router.get("/execution/errors-timeseries")
 def execution_errors_timeseries(
-    window: str = Query(default="24h", pattern="^(24h|7d|30d)$"),
+    window: str = Query(default="24h", pattern="^(24h|7d|30d|90d|all)$"),
     db: Session = Depends(get_db),
 ):
     since = datetime.now(timezone.utc) - _parse_window(window)
@@ -566,46 +592,17 @@ def execution_events_ingest(
     }
 
 
-@router.get("/execution/events")
-def execution_events(
-    limit: int = Query(default=20, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
-    status_value: str | None = Query(default=None, alias="status", pattern="^(ok|error)$"),
-    db: Session = Depends(get_db),
-):
-    q = db.query(ExecutionEvent)
-    if status_value:
-        q = q.filter(ExecutionEvent.status == status_value)
-
-    total = q.count()
-    rows = q.order_by(ExecutionEvent.created_at.desc()).offset(offset).limit(limit).all()
-
-    return {
-        "total": total,
-        "limit": limit,
-        "offset": offset,
-        "events": [
-            {
-                "id": e.id,
-                "source": e.source,
-                "symbol": e.symbol,
-                "event_type": e.event_type,
-                "status": e.status,
-                "latency_ms": e.latency_ms,
-                "error_message": e.error_message,
-                "created_at": _as_utc(e.created_at).isoformat() if e.created_at else None,
-            }
-            for e in rows
-        ],
-    }
-
-
 @router.get("/funding/trend")
 def funding_trend(
-    window: str = Query(default="7d", pattern="^(24h|7d|30d)$"),
+    window: str = Query(default="7d", pattern="^(24h|7d|30d|90d|all)$"),
+    db: Session = Depends(get_db),
 ):
     now_utc = datetime.now(timezone.utc)
-    since = now_utc - _parse_window(window)
+    if window == "all":
+        earliest_trade_ts = db.query(func.min(Trade.executed_at)).scalar()
+        since = _as_utc(earliest_trade_ts) if earliest_trade_ts else (now_utc - timedelta(days=36500))
+    else:
+        since = now_utc - _parse_window(window)
 
     try:
         start_ms = int(since.timestamp() * 1000)
@@ -619,9 +616,16 @@ def funding_trend(
 
 @router.get("/stats/overview")
 def get_stats_overview(
-    window: str = Query(default="30d", pattern="^(24h|7d|30d)$"),
+    window: str = Query(default="30d", pattern="^(24h|7d|30d|90d|all)$"),
     db: Session = Depends(get_db),
 ):
+    now_utc = datetime.now(timezone.utc)
+    if window == "all":
+        earliest_trade_ts = db.query(func.min(Trade.executed_at)).scalar()
+        since = _as_utc(earliest_trade_ts) if earliest_trade_ts else (now_utc - timedelta(days=36500))
+    else:
+        since = now_utc - _parse_window(window)
+
     all_positions = db.query(Position).all()
     active_positions = [p for p in all_positions if abs(float(p.position_amt) * float(p.mark_price)) > 0]
     total_positions = len(active_positions)
@@ -651,9 +655,6 @@ def get_stats_overview(
         account_balance_total = None
         account_available_est = None
 
-    now_utc = datetime.now(timezone.utc)
-    since = now_utc - _parse_window(window)
-
     all_trades = (
         db.query(Trade)
         .order_by(Trade.executed_at.asc())
@@ -678,12 +679,12 @@ def get_stats_overview(
     total_realized_all = float(sum(float(t.realized_pnl or 0) for t in all_trades))
     start_wallet_est_all = current_wallet - total_realized_all
 
-    # Drawdown + ATH on WINDOW using reconstructed full path as baseline.
+    # Drawdown on WINDOW + ATH on FULL history using reconstructed wallet path.
     running_wallet = start_wallet_est_all
     peak_wallet = running_wallet
     peak_ts = since
     ath_wallet = running_wallet
-    ath_ts = since
+    ath_ts = now_utc
     max_drawdown_pct = 0.0
     max_dd_duration_hours = 0.0
 
@@ -693,13 +694,16 @@ def get_stats_overview(
         ts = _as_utc(t.executed_at)
         close_wallet_by_ts[ts] = running_wallet
 
+        # Global ATH (not limited by selected window)
+        if running_wallet > ath_wallet:
+            ath_wallet = running_wallet
+            ath_ts = ts
+
+        # Window-specific drawdown metrics
         if ts >= since:
             if running_wallet > peak_wallet:
                 peak_wallet = running_wallet
                 peak_ts = ts
-            if running_wallet > ath_wallet:
-                ath_wallet = running_wallet
-                ath_ts = ts
 
             if peak_wallet > 0:
                 dd = ((peak_wallet - running_wallet) / peak_wallet) * 100
@@ -899,11 +903,34 @@ def get_stats_overview(
     current_balance_ref = float(account_balance_total or account_balance_wallet or 0.0)
     avg_r_loss_pct_current_balance = (avg_r_loss_usd / current_balance_ref * 100) if current_balance_ref > 0 else 0.0
 
-    # Display ATH on same basis as BALANCE card (incl. current margin proxy).
-    ath_balance_display = max(ath_wallet + margin_used_positions, float(account_balance_total or 0.0))
+    # Display ATH on same basis as BALANCE card.
+    # Prefer AccountSnapshot ATH timestamp/value when available.
+    snapshot_ath_ts = None
+    snapshot_ath_val = None
+    for s in snaps:
+        sts = _as_utc(s.created_at)
+        # Use wallet balance for ATH consistency with user-facing balance notion.
+        # Fallback to equity_total only if wallet is unavailable.
+        if s.wallet_balance is not None:
+            s_val = float(s.wallet_balance)
+        elif s.equity_total is not None:
+            s_val = float(s.equity_total)
+        else:
+            continue
+
+        if (snapshot_ath_val is None) or (s_val > snapshot_ath_val):
+            snapshot_ath_val = s_val
+            snapshot_ath_ts = sts
+
+    if snapshot_ath_ts is not None and snapshot_ath_val is not None:
+        ath_ts_display = snapshot_ath_ts
+        ath_balance_display = float(snapshot_ath_val)
+    else:
+        ath_ts_display = ath_ts
+        ath_balance_display = float(ath_wallet)
 
     now = datetime.now(timezone.utc)
-    hours_since_ath = max(0.0, (now - ath_ts).total_seconds() / 3600)
+    hours_since_ath = max(0.0, (now - ath_ts_display).total_seconds() / 3600)
 
     funding_fees_cumulative = None
     funding_fees_source = "unavailable"
@@ -983,6 +1010,7 @@ def get_stats_overview(
         "max_consecutive_wins": int(max_consecutive_wins),
         "current_win_streak": int(current_win_streak),
         "last_ath_balance": round(ath_balance_display, 8),
+        "last_ath_at": ath_ts_display.isoformat() if ath_ts_display else None,
         "hours_since_last_ath": round(hours_since_ath, 2),
         "avg_r_loss_pct": round(avg_r_loss_pct, 4),
         "avg_r_loss_pct_verified": round(avg_r_loss_pct_verified, 4),
@@ -1019,7 +1047,7 @@ def get_stats_overview(
 
 @router.get("/stats/equity")
 def get_equity_timeseries(
-    window: str = Query(default="30d", pattern="^(24h|7d|30d)$"),
+    window: str = Query(default="30d", pattern="^(24h|7d|30d|90d|all)$"),
     db: Session = Depends(get_db),
 ):
     since = datetime.now(timezone.utc) - _parse_window(window)
@@ -1048,6 +1076,40 @@ def get_equity_timeseries(
         series.append({"ts": key, "equity": round(cumulative, 4), "pnl_realized": round(by_bucket[key], 4)})
 
     return {"window": window, "points": series}
+
+
+@router.get("/stats/balance")
+def get_balance_timeseries(
+    window: str = Query(default="30d", pattern="^(24h|7d|30d|90d|all)$"),
+    db: Session = Depends(get_db),
+):
+    since = datetime.now(timezone.utc) - _parse_window(window)
+
+    snaps = (
+        db.query(AccountSnapshot)
+        .filter(AccountSnapshot.created_at >= since)
+        .order_by(AccountSnapshot.created_at.asc())
+        .all()
+    )
+
+    points = []
+    for s in snaps:
+        dt = _as_utc(s.created_at)
+        ts = dt.replace(minute=0, second=0, microsecond=0).isoformat() if window == "24h" else dt.date().isoformat()
+        points.append(
+            {
+                "ts": ts,
+                "wallet_balance": float(s.wallet_balance or 0),
+                "equity_total": float(s.equity_total or 0),
+                "margin_used": float(s.margin_used or 0),
+            }
+        )
+
+    dedup: dict[str, dict] = {}
+    for p in points:
+        dedup[p["ts"]] = p
+
+    return {"window": window, "points": [dedup[k] for k in sorted(dedup.keys())]}
 
 
 @router.get("/risk/exposure")
@@ -1095,7 +1157,7 @@ def get_trades(
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     symbol: str | None = Query(default=None, min_length=3, max_length=20),
-    window: str | None = Query(default=None, pattern="^(24h|7d|30d)$"),
+    window: str | None = Query(default=None, pattern="^(24h|7d|30d|90d|all)$"),
     sort_by: str = Query(default="executed_at", pattern="^(executed_at|symbol|realized_pnl)$"),
     sort_dir: str = Query(default="desc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
@@ -1151,7 +1213,7 @@ def get_closed_positions(
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     symbol: str | None = Query(default=None, min_length=3, max_length=20),
-    window: str | None = Query(default=None, pattern="^(24h|7d|30d)$"),
+    window: str | None = Query(default=None, pattern="^(24h|7d|30d|90d|all)$"),
     sort_dir: str = Query(default="desc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
 ):
@@ -1355,7 +1417,7 @@ def _audit_query(window: str, db: Session):
 
 @router.get("/audit/summary")
 def audit_summary(
-    window: str = Query(default="30d", pattern="^(24h|7d|30d)$"),
+    window: str = Query(default="30d", pattern="^(24h|7d|30d|90d|all)$"),
     db: Session = Depends(get_db),
 ):
     trades = _audit_query(window, db).all()
@@ -1383,7 +1445,7 @@ def audit_summary(
 
 @router.get("/audit/trades")
 def audit_trades(
-    window: str = Query(default="30d", pattern="^(24h|7d|30d)$"),
+    window: str = Query(default="30d", pattern="^(24h|7d|30d|90d|all)$"),
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -1427,7 +1489,7 @@ def audit_trades(
 
 @router.get("/audit/trades.csv")
 def audit_trades_csv(
-    window: str = Query(default="30d", pattern="^(24h|7d|30d)$"),
+    window: str = Query(default="30d", pattern="^(24h|7d|30d|90d|all)$"),
     db: Session = Depends(get_db),
 ):
     rows = _audit_query(window, db).all()

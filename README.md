@@ -13,31 +13,32 @@ Minimal stack for Binance futures sync + dashboard display.
 
 Base URL: `http://localhost:8000/api/v1`
 
-- `GET /stats/overview?window=24h|7d|30d` (includes active positions count, balance/ATH/DD, R-metrics by closed position, win-rate long/short, avg holding time, exit distribution exact/proxy, funding fees, fee drag %, funding share %)
-- `GET /stats/equity?window=24h|7d|30d`
+- `GET /stats/overview?window=24h|7d|30d|90d|all` (includes active positions count, balance/ATH/DD, R-metrics by closed position, win-rate long/short, avg holding time, exit distribution exact/proxy, funding fees, fee drag %, funding share %)
+- `GET /stats/equity?window=24h|7d|30d|90d|all`
 - `GET /risk/exposure`
-- `GET /trades?limit=100&offset=0&window=24h|7d|30d&sort_by=executed_at|symbol|realized_pnl&sort_dir=asc|desc&symbol=BTCUSDT` (aggregated by order/fills)
+- `GET /trades?limit=100&offset=0&window=24h|7d|30d|90d|all&sort_by=executed_at|symbol|realized_pnl&sort_dir=asc|desc&symbol=BTCUSDT` (aggregated by order/fills)
 - `GET /positions?include_zero=false` (default hides zero-notional rows)
-- `GET /analytics/closed-positions?window=24h|7d|30d&limit=100&offset=0` (derived closed-position ledger)
+- `GET /analytics/closed-positions?window=24h|7d|30d|90d|all&limit=100&offset=0` (derived closed-position ledger)
 - `GET /diagnostics/connectors` (db status/latency, binance mode, last sync, security mode)
 - `GET /diagnostics/db-writable` (sqlite writability check: file/dir permissions)
-- `GET /product/readiness?window=24h|7d|30d` (global readiness status: db/heartbeat/execution/exit coverage/funding)
+- `GET /product/readiness?window=24h|7d|30d|90d|all` (global readiness status: db/heartbeat/execution/exit coverage/funding)
 - `GET /health/runtime` (bot status, heartbeat age/source/status, open positions, open uPnL, API errors 24h)
 - `POST /health/heartbeat` (optional bot-native heartbeat ingestion)
-- `GET /execution/summary?window=24h|7d|30d` (events count, errors, errors_1h, missed-like, avg latency, p50, p95)
+- `GET /execution/summary?window=24h|7d|30d|90d|all` (events count, errors, errors_1h, missed-like, avg latency, p50, p95)
 - `GET /execution/events?limit=20&offset=0&status=ok|error` (latest execution telemetry)
 - `POST /execution/events` (bot/runtime ingestion for execution telemetry + optional exact exit reason updates)
-- `GET /execution/errors-timeseries?window=24h|7d|30d` (error count by hour)
-- `GET /funding/trend?window=24h|7d|30d` (daily funding fee trend)
+- `GET /execution/errors-timeseries?window=24h|7d|30d|90d|all` (error count by hour)
+- `GET /funding/trend?window=24h|7d|30d|90d|all` (daily funding fee trend)
 - `GET /sync/events?limit=20&offset=0&endpoint=sync/all&status=ok|error` (latest sync action logs, filterable)
 - `GET /sync/events.csv?endpoint=sync/all&status=ok|error` (sync events CSV export)
-- `GET /audit/summary?window=24h|7d|30d` (counts, realized, fees, checksum)
-- `GET /audit/trades?window=24h|7d|30d&limit=100&offset=0` (paged audit rows + page checksum)
-- `GET /audit/trades.csv?window=24h|7d|30d` (backend CSV export)
+- `GET /audit/summary?window=24h|7d|30d|90d|all` (counts, realized, fees, checksum)
+- `GET /audit/trades?window=24h|7d|30d|90d|all&limit=100&offset=0` (paged audit rows + page checksum)
+- `GET /audit/trades.csv?window=24h|7d|30d|90d|all` (backend CSV export)
 - `POST /sync/trades?symbol=BTCUSDT&limit=100`
 - `POST /sync/positions`
 - `POST /sync/all?symbol=BTCUSDT&limit=100`
-- `POST /sync/scan-all-symbols?limit=1000`
+- `POST /sync/scan-all-symbols?limit=1000&lookback_days=30&max_recent_symbols=60&include_income_discovery=true&max_income_pages=10`
+- `POST /sync/backfill-trades?symbols=BTCUSDT,ETHUSDT&days=90&limit=1000&max_pages_per_symbol=200`
 
 Health: `GET /health`
 

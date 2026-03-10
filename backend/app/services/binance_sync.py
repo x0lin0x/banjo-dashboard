@@ -1,5 +1,5 @@
 import hashlib, hmac, logging, time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from urllib.parse import urlencode
 import requests
@@ -49,8 +49,13 @@ class BinanceSyncService:
         url = f"{self.base_url}{endpoint}?{query}&signature={signature}"
         headers = {"X-MBX-APIKEY": self.api_key}
         response = requests.get(url, headers=headers, timeout=20)
-        response.raise_for_status()
-        return response.json() if isinstance(response.json(), list) else []
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            detail = response.text[:500] if response is not None else ""
+            raise requests.HTTPError(f"{exc} | body={detail}", response=response) from exc
+        data = response.json()
+        return data if isinstance(data, list) else []
 
     def fetch_recent_trades(self, symbol: str = "BTCUSDT", limit: int = 100) -> list[dict]:
         if not self.api_key or not self.api_secret:
@@ -107,8 +112,9 @@ class BinanceSyncService:
         raw = row.get("availableBalance", row.get("balance", "0"))
         return Decimal(str(raw))
 
-    def _fetch_funding_income_rows(
+    def _fetch_income_rows(
         self,
+        income_type: str | None = None,
         start_time_ms: int | None = None,
         end_time_ms: int | None = None,
         max_pages: int = 5,
@@ -121,10 +127,9 @@ class BinanceSyncService:
         current_start = start_time_ms
 
         while page <= max_pages:
-            params = {
-                "incomeType": "FUNDING_FEE",
-                "limit": 1000,
-            }
+            params = {"limit": 1000}
+            if income_type:
+                params["incomeType"] = income_type
             if current_start is not None:
                 params["startTime"] = int(current_start)
             if end_time_ms is not None:
@@ -146,6 +151,38 @@ class BinanceSyncService:
             page += 1
 
         return out
+
+    def _fetch_funding_income_rows(
+        self,
+        start_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+        max_pages: int = 5,
+    ) -> list[dict]:
+        return self._fetch_income_rows(
+            income_type="FUNDING_FEE",
+            start_time_ms=start_time_ms,
+            end_time_ms=end_time_ms,
+            max_pages=max_pages,
+        )
+
+    def fetch_recent_traded_symbols(
+        self,
+        start_time_ms: int,
+        end_time_ms: int,
+        max_pages: int = 10,
+    ) -> list[str]:
+        rows = self._fetch_income_rows(
+            income_type=None,
+            start_time_ms=start_time_ms,
+            end_time_ms=end_time_ms,
+            max_pages=max_pages,
+        )
+        syms = set()
+        for r in rows:
+            s = str(r.get("symbol", "") or "").upper().strip()
+            if s and s.endswith("USDT"):
+                syms.add(s)
+        return sorted(syms)
 
     def fetch_funding_fees_sum(
         self,
@@ -194,16 +231,15 @@ class BinanceSyncService:
             out[day] = out.get(day, Decimal("0")) + income
         return out
 
-    def sync_trades(self, db: Session, symbol: str = "BTCUSDT", limit: int = 100) -> int:
-        trades = self.fetch_recent_trades(symbol=symbol, limit=limit)
+    def _insert_trade_rows(self, db: Session, rows: list[dict], default_symbol: str) -> int:
         inserted = 0
-        for raw in trades:
+        for raw in rows:
             trade_id = str(raw.get("id"))
             if not trade_id or db.query(Trade).filter(Trade.binance_trade_id == trade_id).first():
                 continue
             trade = Trade(
                 binance_trade_id=trade_id,
-                symbol=raw.get("symbol", symbol),
+                symbol=raw.get("symbol", default_symbol),
                 order_id=str(raw.get("orderId", "")) or None,
                 side=raw.get("side", "BUY"),
                 price=Decimal(str(raw.get("price", "0"))),
@@ -219,9 +255,89 @@ class BinanceSyncService:
             )
             db.add(trade)
             inserted += 1
+
         if inserted:
             db.commit()
         return inserted
+
+    def fetch_trades_window(
+        self,
+        symbol: str,
+        start_time_ms: int,
+        end_time_ms: int,
+        limit: int = 1000,
+    ) -> list[dict]:
+        endpoint = "/fapi/v1/userTrades"
+        params = {
+            "symbol": symbol,
+            "limit": min(max(limit, 1), 1000),
+            "startTime": int(start_time_ms),
+            "endTime": int(end_time_ms),
+        }
+        return self._signed_get(endpoint, params=params)
+
+    def sync_trades_historical(
+        self,
+        db: Session,
+        symbol: str,
+        start_time_ms: int,
+        end_time_ms: int,
+        limit: int = 1000,
+        max_pages: int = 200,
+    ) -> dict:
+        # Binance /fapi/v1/userTrades enforces short time ranges. Use 7-day chunks.
+        chunk_ms = int(timedelta(days=7).total_seconds() * 1000) - 1
+
+        total_inserted = 0
+        total_seen = 0
+        pages = 0
+        current_start = int(start_time_ms)
+        hard_end = int(end_time_ms)
+        last_seen_ts = None
+
+        while current_start <= hard_end and pages < max_pages:
+            current_end = min(hard_end, current_start + chunk_ms)
+
+            rows = self.fetch_trades_window(
+                symbol=symbol,
+                start_time_ms=current_start,
+                end_time_ms=current_end,
+                limit=limit,
+            )
+            pages += 1
+
+            if not rows:
+                current_start = current_end + 1
+                continue
+
+            rows_sorted = sorted(rows, key=lambda r: int(r.get("time", 0) or 0))
+            total_seen += len(rows_sorted)
+            total_inserted += self._insert_trade_rows(db=db, rows=rows_sorted, default_symbol=symbol)
+
+            last_ts = int(rows_sorted[-1].get("time", 0) or 0)
+            if last_ts <= current_start:
+                current_start = current_end + 1
+            else:
+                last_seen_ts = last_ts
+                # If page is full, continue inside same 7d chunk from last ts+1
+                if len(rows_sorted) >= min(max(limit, 1), 1000) and last_ts < current_end:
+                    current_start = last_ts + 1
+                else:
+                    current_start = current_end + 1
+
+        return {
+            "symbol": symbol,
+            "inserted": int(total_inserted),
+            "seen": int(total_seen),
+            "pages": int(pages),
+            "start_time_ms": int(start_time_ms),
+            "end_time_ms": int(end_time_ms),
+            "last_seen_time_ms": int(last_seen_ts) if last_seen_ts is not None else None,
+        }
+
+    def sync_trades(self, db: Session, symbol: str = "BTCUSDT", limit: int = 100) -> int:
+        trades = self.fetch_recent_trades(symbol=symbol, limit=limit)
+        return self._insert_trade_rows(db=db, rows=trades, default_symbol=symbol)
 
     def sync_positions(self, db: Session) -> int:
         positions = self.fetch_positions()

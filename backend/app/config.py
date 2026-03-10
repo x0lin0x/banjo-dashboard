@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     app_port: int = 8000
     debug: bool = True
     app_read_only: bool = False
+    app_role: str = "operator"
     sync_api_token: str = ""
     sync_min_interval_seconds: int = 5
     database_url: str = "sqlite:///./trading.db"

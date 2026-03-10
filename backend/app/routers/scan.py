@@ -100,9 +100,11 @@ def _log_execution_event(
 @router.post("/sync/scan-all-symbols")
 def scan_all_symbols(
     limit: int = Query(default=120, ge=1, le=1000),
-    lookback_days: int = Query(default=7, ge=1, le=30),
-    max_recent_symbols: int = Query(default=10, ge=1, le=100),
+    lookback_days: int = Query(default=7, ge=1, le=90),
+    max_recent_symbols: int = Query(default=10, ge=1, le=200),
     per_symbol_delay_ms: int = Query(default=350, ge=0, le=3000),
+    include_income_discovery: bool = Query(default=True, description="Discover traded symbols via Binance income endpoint"),
+    max_income_pages: int = Query(default=10, ge=1, le=100),
     symbols: str | None = Query(default=None, description="Optional CSV symbols to force scan, ex: ETHUSDT,SOLUSDT"),
     _: None = Depends(require_sync_access),
     db: Session = Depends(get_db),
@@ -143,7 +145,22 @@ def scan_all_symbols(
         if symbols:
             manual_symbols = {s.strip().upper() for s in symbols.split(",") if s.strip()}
 
-        symbols_to_scan = sorted(active_symbols | set(recent_trade_symbols) | manual_symbols)
+        discovered_symbols = set()
+        if include_income_discovery:
+            try:
+                start_ms = int(since.timestamp() * 1000)
+                end_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+                discovered_symbols = set(
+                    binance_sync_service.fetch_recent_traded_symbols(
+                        start_time_ms=start_ms,
+                        end_time_ms=end_ms,
+                        max_pages=max_income_pages,
+                    )
+                )
+            except Exception:
+                discovered_symbols = set()
+
+        symbols_to_scan = sorted(active_symbols | set(recent_trade_symbols) | manual_symbols | discovered_symbols)
 
         total_inserted = 0
         results = []
@@ -171,6 +188,7 @@ def scan_all_symbols(
             "symbols_active": len(active_symbols),
             "symbols_recent": len(recent_trade_symbols),
             "symbols_manual": len(manual_symbols),
+            "symbols_discovered_income": len(discovered_symbols),
             "total_trades_inserted": total_inserted,
             "results": results,
         }

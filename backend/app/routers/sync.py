@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import os
 from pathlib import Path
@@ -267,5 +267,83 @@ def sync_all(
         duration = int((time.time() - started) * 1000)
         _log_sync_event(db, endpoint, actor, "error", str(exc)[:240], symbol.upper(), duration)
         _log_execution_event(db, event_type=endpoint, status_value="error", latency_ms=duration, symbol=symbol.upper(), error_message=str(exc)[:240])
+        _log_heartbeat(db, status_value="error", note=str(exc)[:240])
+        raise
+
+
+@router.post("/backfill-trades")
+def backfill_trades(
+    request: Request,
+    symbols: str = Query(..., description="CSV symbols, ex: BTCUSDT,ETHUSDT,SOLUSDT"),
+    days: int = Query(default=60, ge=1, le=365),
+    limit: int = Query(default=1000, ge=1, le=1000),
+    max_pages_per_symbol: int = Query(default=120, ge=1, le=500),
+    _: None = Depends(require_sync_access),
+    db: Session = Depends(get_db),
+) -> dict:
+    started = time.time()
+    actor = _actor_from_request(request)
+    endpoint = "sync/backfill-trades"
+
+    try:
+        _ensure_db_writable_or_503()
+        _enforce_rate_limit(endpoint, actor)
+
+        symbol_list = sorted({s.strip().upper() for s in symbols.split(",") if s.strip()})
+        if not symbol_list:
+            raise HTTPException(status_code=400, detail="No symbols provided")
+
+        end_dt = datetime.now(timezone.utc)
+        start_dt = end_dt - timedelta(days=days)
+        start_ms = int(start_dt.timestamp() * 1000)
+        end_ms = int(end_dt.timestamp() * 1000)
+
+        results: list[dict] = []
+        total_inserted = 0
+        total_seen = 0
+
+        for sym in symbol_list:
+            res = binance_sync_service.sync_trades_historical(
+                db=db,
+                symbol=sym,
+                start_time_ms=start_ms,
+                end_time_ms=end_ms,
+                limit=limit,
+                max_pages=max_pages_per_symbol,
+            )
+            total_inserted += int(res.get("inserted", 0) or 0)
+            total_seen += int(res.get("seen", 0) or 0)
+            results.append(res)
+
+        try:
+            _snapshot_account_state(db)
+        except Exception:
+            pass
+
+        duration = int((time.time() - started) * 1000)
+        _log_sync_event(db, endpoint, actor, "ok", f"symbols={len(symbol_list)} inserted={total_inserted}", None, duration)
+        _log_execution_event(db, event_type=endpoint, status_value="ok", latency_ms=duration)
+        _log_heartbeat(db, status_value="ok")
+
+        return {
+            "status": "ok",
+            "endpoint": endpoint,
+            "days": days,
+            "symbols": symbol_list,
+            "symbols_count": len(symbol_list),
+            "total_seen": total_seen,
+            "total_inserted": total_inserted,
+            "start_time": start_dt.isoformat(),
+            "end_time": end_dt.isoformat(),
+            "results": results,
+        }
+    except Exception as exc:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        duration = int((time.time() - started) * 1000)
+        _log_sync_event(db, endpoint, actor, "error", str(exc)[:240], None, duration)
+        _log_execution_event(db, event_type=endpoint, status_value="error", latency_ms=duration, error_message=str(exc)[:240])
         _log_heartbeat(db, status_value="error", note=str(exc)[:240])
         raise
