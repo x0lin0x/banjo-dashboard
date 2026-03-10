@@ -1,0 +1,367 @@
+import hashlib, hmac, logging, time
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+from urllib.parse import urlencode
+import requests
+from sqlalchemy.orm import Session
+from app.config import settings
+from app.models.position import Position
+from app.models.trade import Trade
+
+logger = logging.getLogger(__name__)
+
+class BinanceSyncService:
+    @staticmethod
+    def _normalize_exit_reason(value: str | None) -> str | None:
+        if value is None:
+            return None
+        raw = str(value).strip().lower()
+        if not raw:
+            return None
+
+        if raw in {"tp", "take_profit", "takeprofit"}:
+            return "tp"
+        if raw in {"sl", "stop_loss", "stoploss"}:
+            return "sl"
+        if raw in {"manual", "manual_close", "user_close"}:
+            return "manual"
+        if raw in {"opposite", "reverse", "flip"}:
+            return "opposite"
+        if raw in {"timeout", "time", "expiry"}:
+            return "timeout"
+        return "other"
+
+    def __init__(self, api_key: str, api_secret: str, base_url: str) -> None:
+        self.api_key = api_key
+        self.api_secret = api_secret
+        self.base_url = base_url.rstrip("/")
+        # Reduce Binance pressure from frequent dashboard refreshes.
+        self._balance_cache: dict[str, tuple[float, Decimal | None]] = {}
+        self._balance_cache_ttl_seconds: int = 30
+
+    def _signed_get(self, endpoint: str, params: dict | None = None) -> list[dict]:
+        if not self.api_key or not self.api_secret:
+            raise ValueError("Binance API credentials are missing.")
+        payload = params.copy() if params else {}
+        payload["timestamp"] = int(time.time() * 1000)
+        query = urlencode(payload)
+        signature = hmac.new(self.api_secret.encode("utf-8"), query.encode("utf-8"), hashlib.sha256).hexdigest()
+        url = f"{self.base_url}{endpoint}?{query}&signature={signature}"
+        headers = {"X-MBX-APIKEY": self.api_key}
+        response = requests.get(url, headers=headers, timeout=20)
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            detail = response.text[:500] if response is not None else ""
+            raise requests.HTTPError(f"{exc} | body={detail}", response=response) from exc
+        data = response.json()
+        return data if isinstance(data, list) else []
+
+    def fetch_recent_trades(self, symbol: str = "BTCUSDT", limit: int = 100) -> list[dict]:
+        if not self.api_key or not self.api_secret:
+            logger.warning("No Binance credentials found. Returning mock trades.")
+            now_ms = int(time.time() * 1000)
+            return [{"id": f"mock-{now_ms}", "symbol": symbol, "orderId": "mock-order", "side": "BUY", "price": "50000", "qty": "0.001", "quoteQty": "50", "commission": "0.01", "commissionAsset": "USDT", "realizedPnl": "0", "time": now_ms, "signalId": f"sig-{symbol}-{now_ms}", "decisionId": f"dec-{symbol}-{now_ms}"}]
+        endpoint = "/fapi/v1/userTrades"
+        params = {"symbol": symbol, "limit": min(max(limit, 1), 1000)}
+        return self._signed_get(endpoint, params=params)
+
+    def fetch_positions(self) -> list[dict]:
+        if not self.api_key or not self.api_secret:
+            logger.warning("No Binance credentials found. Returning mock positions.")
+            return [{"symbol": "BTCUSDT", "positionAmt": "0.001", "entryPrice": "50000", "markPrice": "50500", "unRealizedProfit": "0.5", "leverage": "10"}]
+        endpoint = "/fapi/v2/positionRisk"
+        return self._signed_get(endpoint)
+
+    def _fetch_balance_row(self, asset: str = "USDT") -> dict | None:
+        wanted = asset.upper().strip()
+
+        if not self.api_key or not self.api_secret:
+            logger.warning("No Binance credentials found. Returning mock balance row.")
+            return {"asset": wanted, "balance": "10000", "availableBalance": "9900"}
+
+        endpoint = "/fapi/v2/balance"
+        rows = self._signed_get(endpoint)
+        for row in rows:
+            if str(row.get("asset", "")).upper() == wanted:
+                return row
+        return None
+
+    def fetch_account_balance(self, asset: str = "USDT") -> Decimal | None:
+        wanted = asset.upper().strip()
+
+        # short in-memory cache to avoid hammering Binance on every dashboard refresh
+        now = time.time()
+        cached = self._balance_cache.get(wanted)
+        if cached and (now - cached[0]) < self._balance_cache_ttl_seconds:
+            return cached[1]
+
+        row = self._fetch_balance_row(asset=wanted)
+        value = None
+        if row is not None:
+            raw = row.get("balance", row.get("crossWalletBalance", "0"))
+            value = Decimal(str(raw))
+
+        self._balance_cache[wanted] = (now, value)
+        return value
+
+    def fetch_account_available_balance(self, asset: str = "USDT") -> Decimal | None:
+        row = self._fetch_balance_row(asset=asset)
+        if row is None:
+            return None
+        raw = row.get("availableBalance", row.get("balance", "0"))
+        return Decimal(str(raw))
+
+    def _fetch_income_rows(
+        self,
+        income_type: str | None = None,
+        start_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+        max_pages: int = 5,
+    ) -> list[dict]:
+        if not self.api_key or not self.api_secret:
+            return []
+
+        out: list[dict] = []
+        page = 1
+        current_start = start_time_ms
+
+        while page <= max_pages:
+            params = {"limit": 1000}
+            if income_type:
+                params["incomeType"] = income_type
+            if current_start is not None:
+                params["startTime"] = int(current_start)
+            if end_time_ms is not None:
+                params["endTime"] = int(end_time_ms)
+
+            rows = self._signed_get("/fapi/v1/income", params=params)
+            if not rows:
+                break
+
+            out.extend(rows)
+
+            if len(rows) < 1000:
+                break
+
+            last_time = rows[-1].get("time")
+            if not last_time:
+                break
+            current_start = int(last_time) + 1
+            page += 1
+
+        return out
+
+    def _fetch_funding_income_rows(
+        self,
+        start_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+        max_pages: int = 5,
+    ) -> list[dict]:
+        return self._fetch_income_rows(
+            income_type="FUNDING_FEE",
+            start_time_ms=start_time_ms,
+            end_time_ms=end_time_ms,
+            max_pages=max_pages,
+        )
+
+    def fetch_recent_traded_symbols(
+        self,
+        start_time_ms: int,
+        end_time_ms: int,
+        max_pages: int = 10,
+    ) -> list[str]:
+        rows = self._fetch_income_rows(
+            income_type=None,
+            start_time_ms=start_time_ms,
+            end_time_ms=end_time_ms,
+            max_pages=max_pages,
+        )
+        syms = set()
+        for r in rows:
+            s = str(r.get("symbol", "") or "").upper().strip()
+            if s and s.endswith("USDT"):
+                syms.add(s)
+        return sorted(syms)
+
+    def fetch_funding_fees_sum(
+        self,
+        start_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+        max_pages: int = 5,
+    ) -> Decimal | None:
+        """Return sum of FUNDING_FEE income over range."""
+        if not self.api_key or not self.api_secret:
+            return Decimal("0")
+
+        total = Decimal("0")
+        rows = self._fetch_funding_income_rows(start_time_ms=start_time_ms, end_time_ms=end_time_ms, max_pages=max_pages)
+        for r in rows:
+            total += Decimal(str(r.get("income", "0")))
+        return total
+
+    def fetch_funding_fees_by_symbol(
+        self,
+        start_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+        max_pages: int = 5,
+    ) -> dict[str, Decimal]:
+        rows = self._fetch_funding_income_rows(start_time_ms=start_time_ms, end_time_ms=end_time_ms, max_pages=max_pages)
+        out: dict[str, Decimal] = {}
+        for r in rows:
+            symbol = str(r.get("symbol", "UNKNOWN") or "UNKNOWN")
+            income = Decimal(str(r.get("income", "0")))
+            out[symbol] = out.get(symbol, Decimal("0")) + income
+        return out
+
+    def fetch_funding_fees_by_day(
+        self,
+        start_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+        max_pages: int = 5,
+    ) -> dict[str, Decimal]:
+        rows = self._fetch_funding_income_rows(start_time_ms=start_time_ms, end_time_ms=end_time_ms, max_pages=max_pages)
+        out: dict[str, Decimal] = {}
+        for r in rows:
+            ts = int(r.get("time", 0) or 0)
+            if ts <= 0:
+                continue
+            day = datetime.fromtimestamp(ts / 1000, tz=timezone.utc).date().isoformat()
+            income = Decimal(str(r.get("income", "0")))
+            out[day] = out.get(day, Decimal("0")) + income
+        return out
+
+    def _insert_trade_rows(self, db: Session, rows: list[dict], default_symbol: str) -> int:
+        inserted = 0
+        for raw in rows:
+            trade_id = str(raw.get("id"))
+            if not trade_id or db.query(Trade).filter(Trade.binance_trade_id == trade_id).first():
+                continue
+            trade = Trade(
+                binance_trade_id=trade_id,
+                symbol=raw.get("symbol", default_symbol),
+                order_id=str(raw.get("orderId", "")) or None,
+                side=raw.get("side", "BUY"),
+                price=Decimal(str(raw.get("price", "0"))),
+                qty=Decimal(str(raw.get("qty", "0"))),
+                quote_qty=Decimal(str(raw.get("quoteQty", "0"))),
+                commission=Decimal(str(raw.get("commission", "0"))),
+                commission_asset=raw.get("commissionAsset", "USDT"),
+                realized_pnl=Decimal(str(raw.get("realizedPnl", "0"))),
+                signal_id=str(raw.get("signalId", "")) or None,
+                decision_id=str(raw.get("decisionId", "")) or None,
+                exit_reason=self._normalize_exit_reason(raw.get("exitReason")),
+                executed_at=datetime.fromtimestamp(int(raw.get("time", int(time.time() * 1000))) / 1000, tz=timezone.utc),
+            )
+            db.add(trade)
+            inserted += 1
+
+        if inserted:
+            db.commit()
+        return inserted
+
+    def fetch_trades_window(
+        self,
+        symbol: str,
+        start_time_ms: int,
+        end_time_ms: int,
+        limit: int = 1000,
+    ) -> list[dict]:
+        endpoint = "/fapi/v1/userTrades"
+        params = {
+            "symbol": symbol,
+            "limit": min(max(limit, 1), 1000),
+            "startTime": int(start_time_ms),
+            "endTime": int(end_time_ms),
+        }
+        return self._signed_get(endpoint, params=params)
+
+    def sync_trades_historical(
+        self,
+        db: Session,
+        symbol: str,
+        start_time_ms: int,
+        end_time_ms: int,
+        limit: int = 1000,
+        max_pages: int = 200,
+    ) -> dict:
+        # Binance /fapi/v1/userTrades enforces short time ranges. Use 7-day chunks.
+        chunk_ms = int(timedelta(days=7).total_seconds() * 1000) - 1
+
+        total_inserted = 0
+        total_seen = 0
+        pages = 0
+        current_start = int(start_time_ms)
+        hard_end = int(end_time_ms)
+        last_seen_ts = None
+
+        while current_start <= hard_end and pages < max_pages:
+            current_end = min(hard_end, current_start + chunk_ms)
+
+            rows = self.fetch_trades_window(
+                symbol=symbol,
+                start_time_ms=current_start,
+                end_time_ms=current_end,
+                limit=limit,
+            )
+            pages += 1
+
+            if not rows:
+                current_start = current_end + 1
+                continue
+
+            rows_sorted = sorted(rows, key=lambda r: int(r.get("time", 0) or 0))
+            total_seen += len(rows_sorted)
+            total_inserted += self._insert_trade_rows(db=db, rows=rows_sorted, default_symbol=symbol)
+
+            last_ts = int(rows_sorted[-1].get("time", 0) or 0)
+            if last_ts <= current_start:
+                current_start = current_end + 1
+            else:
+                last_seen_ts = last_ts
+                # If page is full, continue inside same 7d chunk from last ts+1
+                if len(rows_sorted) >= min(max(limit, 1), 1000) and last_ts < current_end:
+                    current_start = last_ts + 1
+                else:
+                    current_start = current_end + 1
+
+        return {
+            "symbol": symbol,
+            "inserted": int(total_inserted),
+            "seen": int(total_seen),
+            "pages": int(pages),
+            "start_time_ms": int(start_time_ms),
+            "end_time_ms": int(end_time_ms),
+            "last_seen_time_ms": int(last_seen_ts) if last_seen_ts is not None else None,
+        }
+
+    def sync_trades(self, db: Session, symbol: str = "BTCUSDT", limit: int = 100) -> int:
+        trades = self.fetch_recent_trades(symbol=symbol, limit=limit)
+        return self._insert_trade_rows(db=db, rows=trades, default_symbol=symbol)
+
+    def sync_positions(self, db: Session) -> int:
+        positions = self.fetch_positions()
+        updated = 0
+        for raw in positions:
+            symbol = raw.get("symbol")
+            if not symbol:
+                continue
+            pos = db.query(Position).filter(Position.symbol == symbol).first()
+            if not pos:
+                pos = Position(symbol=symbol)
+                db.add(pos)
+            pos.position_amt = Decimal(str(raw.get("positionAmt", "0")))
+            pos.entry_price = Decimal(str(raw.get("entryPrice", "0")))
+            pos.mark_price = Decimal(str(raw.get("markPrice", "0")))
+            pos.unrealized_pnl = Decimal(str(raw.get("unRealizedProfit", "0")))
+            pos.leverage = int(raw.get("leverage", 1))
+            updated += 1
+        if updated:
+            db.commit()
+        return updated
+
+binance_sync_service = BinanceSyncService(
+    api_key=settings.binance_api_key,
+    api_secret=settings.binance_api_secret,
+    base_url=settings.binance_base_url,
+)

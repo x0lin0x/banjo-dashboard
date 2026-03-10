@@ -1,0 +1,8 @@
+   node_modules/                                                                                                                                                                  
+   backend/.env                                                                                                                                                                   
+   backend/trading.db                                                                                                                                                             
+   *.db                                                                                                                                                                           
+   __pycache__/                                                                                                                                                                   
+   *.pyc                                                                                                                                                                          
+   dist/                                                                                                                                                                          
+   build/  
